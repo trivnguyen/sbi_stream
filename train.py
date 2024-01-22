@@ -2,6 +2,7 @@
 import os
 import pickle
 import sys
+import shutil
 
 import ml_collections
 import numpy as np
@@ -13,19 +14,35 @@ from absl import flags, logging
 from ml_collections import config_flags
 
 import datasets
-from models import models, regressor
+from models import models, regressor, utils
 
 logging.set_verbosity(logging.INFO)
 
 def train(
     config: ml_collections.ConfigDict, workdir: str = "./logging/"
 ):
-    # set seed
     pl.seed_everything(config.seed)
+
+    # set up work directory
+    if not hasattr(config, "name"):
+        name = utils.get_random_name()
+    else:
+        name = config["name"]
+    logging.info("Starting training run {} at {}".format(name, workdir))
+
+    workdir = os.path.join(workdir, name)
+    if os.path.exists(workdir):
+        if os.overwrite:
+            shutil.rmtree(workdir)
+        else:
+            raise ValueError(
+                f"Workdir {workdir} already exists. Please set overwrite=True "
+                "to overwrite the existing directory.")
+
 
     # read in the dataset and prepare the data loader for training
     data_dir = os.path.join(config.data.root, config.data.name)
-    data_processed_path = os.path.join(data_dir, f"processed/{config.name}.pkl")
+    data_processed_path = os.path.join(data_dir, f"processed/{name}.pkl")
     os.makedirs(os.path.dirname(data_processed_path), exist_ok=True)
 
     if os.path.exists(data_processed_path):
@@ -46,6 +63,7 @@ def train(
         train_batch_size=config.train_batch_size,
         eval_batch_size=config.eval_batch_size,
         num_workers=config.num_workers,
+        seed=config.seed,  # reset seed for splitting train/val
     )
 
     # create model
@@ -69,7 +87,7 @@ def train(
         pl.callbacks.LearningRateMonitor("epoch"),
     ]
 
-    train_logger = pl_loggers.TensorBoardLogger(workdir, name=config.name)
+    train_logger = pl_loggers.TensorBoardLogger(workdir, version='')
     trainer = pl.Trainer(
         default_root_dir=workdir,
         max_epochs=config.num_epochs,
