@@ -25,7 +25,8 @@ def train(
 
     # read in the dataset and prepare the data loader for training
     data_dir = os.path.join(config.data.root, config.data.name)
-    data_processed_path = os.path.join(data_dir, "processed_data.pkl")
+    data_processed_path = os.path.join(data_dir, f"processed/{config.name}.pkl")
+    os.makedirs(os.path.dirname(data_processed_path), exist_ok=True)
 
     if os.path.exists(data_processed_path):
         logging.info("Loading processed data from %s", data_processed_path)
@@ -33,9 +34,8 @@ def train(
             data = pickle.load(f)
     else:
         logging.info("Processing raw data from %s", data_dir)
-        raw_data_dir = os.path.join(data_dir, "raw_data")
         data = datasets.read_process_dataset(
-            raw_data_dir, config.data.labels, config.data.num_bins)
+            data_dir, config.data.labels, config.data.num_bins)
         logging.info("Saving processed data to %s", data_processed_path)
         with open(data_processed_path, "wb") as f:
             pickle.dump(data, f)
