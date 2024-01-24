@@ -51,8 +51,9 @@ def train(
             data = pickle.load(f)
     else:
         logging.info("Processing raw data from %s", data_dir)
-        data = datasets.read_process_dataset(
+        data = datasets.read_process_binned_dataset(
             data_dir, config.data.labels, config.data.num_bins)
+
         logging.info("Saving processed data to %s", data_processed_path)
         with open(data_processed_path, "wb") as f:
             pickle.dump(data, f)
