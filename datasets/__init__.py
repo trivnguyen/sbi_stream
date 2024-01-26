@@ -14,7 +14,9 @@ from . import io_utils, preprocess_utils
 
 
 def read_process_binned_dataset(
-    data_dir: Union[str, Path], labels: List[str], num_bins: int):
+    data_dir: Union[str, Path], labels: List[str], num_bins: int,
+    num_datasets: int = 1
+    ):
     """ Read the dataset and process into a binned dataset
 
     Parameters
@@ -26,35 +28,46 @@ def read_process_binned_dataset(
     num_bins : int
         Number of bins to use for binning the stream.
     """
-    # read in the stream labels and data
-    table = pd.read_csv(os.path.join(data_dir, 'labels.csv'))
-    data, ptr = io_utils.read_dataset(
-        os.path.join(data_dir, 'data.hdf5'), unpack=True)
-
-    # compute some derived labels
-    table['log_M_sat'] = np.log10(table['M_sat'])
-
-    loop = tqdm(range(len(table)))
-
     x, y, t = [], [], []
-    for i in loop:
-        loop.set_description(f'Processing pid {i}')
-        phi1 = data['phi1'][i]
-        phi2 = data['phi2'][i]
-        pm1 = data['pm1'][i]
-        pm2 = data['pm2'][i]
-        vr = data['vr'][i]
-        dist = data['dist'][i]
-        feat = np.stack([phi2, pm1, pm2, vr, dist], axis=1)
-        label = table[labels].iloc[i].values
 
-        # bin the stream
-        phi1_bin_centers, feat_mean, feat_stdv = preprocess_utils.bin_stream(
-            phi1, feat, num_bins=num_bins)
+    for i in range(num_datasets):
+        label_fn = os.path.join(data_dir, f'labels.{i}.csv')
+        data_fn = os.path.join(data_dir, f'data.{i}.hdf5')
 
-        x.append(np.concatenate([feat_mean, feat_stdv], axis=1))
-        y.append(label)
-        t.append(phi1_bin_centers.reshape(-1, 1))
+        if os.path.exists(label_fn) & os.path.exists(data_fn):
+            print('Reading in data from {}'.format(data_fn))
+        else:
+            print('Dataset {} not found. Skipping...'.format(i))
+            continue
+
+        # read in the data and label
+        table = pd.read_csv(label_fn)
+        data, ptr = io_utils.read_dataset(data_fn, unpack=True)
+
+        # compute some derived labels
+        table['log_M_sat'] = np.log10(table['M_sat'])
+        table['log_rs_sat'] = np.log10(table['rs_sat'])
+
+        loop = tqdm(range(len(table)))
+
+        for pid in loop:
+            loop.set_description(f'Processing pid {pid}')
+            phi1 = data['phi1'][pid]
+            phi2 = data['phi2'][pid]
+            pm1 = data['pm1'][pid]
+            pm2 = data['pm2'][pid]
+            vr = data['vr'][pid]
+            dist = data['dist'][pid]
+            feat = np.stack([phi2, pm1, pm2, vr, dist], axis=1)
+            label = table[labels].iloc[pid].values
+
+            # bin the stream
+            phi1_bin_centers, feat_mean, feat_stdv = preprocess_utils.bin_stream(
+                phi1, feat, num_bins=num_bins)
+
+            x.append(np.concatenate([feat_mean, feat_stdv], axis=1))
+            y.append(label)
+            t.append(phi1_bin_centers.reshape(-1, 1))
 
     x, padding_mask = preprocess_utils.pad_and_create_mask(x)
     t, _ = preprocess_utils.pad_and_create_mask(t)
@@ -63,9 +76,52 @@ def read_process_binned_dataset(
     return x, y, t, padding_mask
 
 
-def read_process_part_dataset(data_dir: Union[str, Path], labels: List[str]):
+def read_process_part_dataset(
+    data_dir: Union[str, Path], labels: List[str]):
     """ Read dataset and process into a particle dataset """
-    pass
+
+    x, y, t = [], [], []
+
+    for i in range(num_datasets):
+        label_fn = os.path.join(data_dir, f'labels.{i}.csv')
+        data_fn = os.path.join(data_dir, f'data.{i}.hdf5')
+
+        if os.path.exists(label_fn) & os.path.exists(data_fn):
+            print('Reading in data from {}'.format(data_fn))
+        else:
+            print('Dataset {} not found. Skipping...'.format(i))
+            continue
+
+        # read in the data and label
+        table = pd.read_csv(label_fn)
+        data, ptr = io_utils.read_dataset(data_fn, unpack=True)
+
+        # compute some derived labels
+        table['log_M_sat'] = np.log10(table['M_sat'])
+        table['log_rs_sat'] = np.log10(table['rs_sat'])
+
+        loop = tqdm(range(len(table)))
+
+        for pid in loop:
+            loop.set_description(f'Processing pid {pid}')
+            phi1 = data['phi1'][pid]
+            phi2 = data['phi2'][pid]
+            pm1 = data['pm1'][pid]
+            pm2 = data['pm2'][pid]
+            vr = data['vr'][pid]
+            dist = data['dist'][pid]
+            feat = np.stack([phi2, pm1, pm2, vr, dist], axis=1)
+            label = table[labels].iloc[pid].values
+
+            x.append(feat)
+            y.append(label)
+            t.append(phi1_bin_centers.reshape(-1, 1))
+
+    x, padding_mask = preprocess_utils.pad_and_create_mask(x)
+    t, _ = preprocess_utils.pad_and_create_mask(t)
+    y = np.stack(y, axis=0)
+
+    return x, y, t, padding_mask
 
 
 
