@@ -8,14 +8,14 @@ def get_config():
 
     # data configuration
     cfg.data = config_dict.ConfigDict()
-    cfg.data.root = '/mnt/home/tnguyen/projects/sbi_stream/data'
+    cfg.data.root = 'root'
     cfg.data.name = ''
     cfg.data.labels = ['M_sat', 'vz']
     cfg.data.num_bins = 10
 
     # logging configuration
     cfg.workdir = './logging/'
-    cfg.name = 'test'
+    cfg.name = 'default'
     cfg.enable_progress_bar = False
 
     # training configuration
