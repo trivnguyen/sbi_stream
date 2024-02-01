@@ -45,3 +45,14 @@ def pad_and_create_mask(features, max_len=None):
     for i, f in enumerate(features):
         padded_features[i, :f.shape[0]] = f
     return padded_features, mask
+
+
+def subsample_stream(phi1: np.ndarray, feat: np.ndarray, subsample_factor: int):
+    """ Subsample the stream by a factor of `subsample_factor`. """
+    # subsample the stream
+    num_subsample = int(np.ceil(len(phi1) / subsample_factor))
+    idx = np.random.choice(len(phi1), num_subsample, replace=False)
+    phi1_subsample = phi1[idx]
+    feat_subsample = feat[idx]
+
+    return phi1_subsample, feat_subsample
