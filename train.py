@@ -55,21 +55,13 @@ def train(
             data = pickle.load(f)
     else:
         logging.info("Processing raw data from %s", data_dir)
-
-        if config.data.num_bins > 0:
-            data = datasets.read_process_binned_dataset(
-                data_dir, config.data.labels, config.data.num_bins,
-                config.data.num_datasets,
-                bounds=config.data.get("label_bounds", None),
-            )
-        else:
-            data = datasets.read_process_part_dataset(
-                data_dir, config.data.labels, config.data.num_datasets,
-                num_subsamples=config.data.num_subsamples,
-                subsample_factor=config.data.subsample_factor,
-                bounds=config.data.get("label_bounds", None),
-            )
-
+        data = read_process_dataset(
+            data_dir, config.data.labels, config.data.num_bins,
+            num_datasets=config.data.num_datasets,
+            num_subsamples=config.data.num_subsamples,
+            subsample_factor=config.data.subsample_factor,
+            bounds=config.data.get("label_bounds", None)
+        )
         logging.info("Saving processed data to %s", data_processed_path)
         with open(data_processed_path, "wb") as f:
             pickle.dump(data, f)

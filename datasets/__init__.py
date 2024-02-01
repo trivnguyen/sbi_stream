@@ -25,12 +25,13 @@ def calculate_derived_properties(table):
     table['vtotal'] = np.sqrt(table['vphi']**2 + table['vz']**2)
     return table
 
-# TODO: combine read_process_binned_dataset and read_process_part_dataset into one
-def read_process_binned_dataset(
+
+def read_process_dataset(
     data_dir: Union[str, Path], labels: List[str], num_bins: int,
-    num_datasets: int = 1, bounds: dict = None
-    ):
-    """ Read the dataset and process into a binned dataset
+    num_datasets: int = 1, num_subsamples: int = 1,
+    subsample_factor: int = 1, bounds: dict = None,
+):
+    """ Read the dataset and preprocess
 
     Parameters
     ----------
@@ -42,6 +43,10 @@ def read_process_binned_dataset(
         Number of bins to use for binning the stream.
     num_datasets : int, optional
         Number of datasets to read in. Default is 1.
+    num_subsamples : int, optional
+        Number of subsamples to use. Default is 1.
+    subsample_factor : int, optional
+        Factor to subsample the data. Default is 1.
     bounds : dict, optional
         Dictionary containing the bounds for each label. Default is None.
     """
@@ -87,86 +92,33 @@ def read_process_binned_dataset(
                     continue
             label = label.values
 
-            # bin the stream
-            phi1_bin_centers, feat_mean, feat_stdv = preprocess_utils.bin_stream(
-                phi1, feat, num_bins=num_bins)
-
-            x.append(np.concatenate([feat_mean, feat_stdv], axis=1))
-            y.append(label)
-            t.append(phi1_bin_centers.reshape(-1, 1))
-
-    x, padding_mask = preprocess_utils.pad_and_create_mask(x)
-    t, _ = preprocess_utils.pad_and_create_mask(t)
-    y = np.stack(y, axis=0)
-
-    return x, y, t, padding_mask
-
-
-def read_process_part_dataset(
-    data_dir: Union[str, Path], labels: List[str],
-    num_datasets: int = 1, num_subsamples: int = 1,
-    subsample_factor: int = 1, bounds: dict = None
-    ):
-    """ Read dataset and process into a particle dataset """
-
-    x, y, t = [], [], []
-
-    for i in range(num_datasets):
-        label_fn = os.path.join(data_dir, f'labels.{i}.csv')
-        data_fn = os.path.join(data_dir, f'data.{i}.hdf5')
-
-        if os.path.exists(label_fn) & os.path.exists(data_fn):
-            print('Reading in data from {}'.format(data_fn))
-        else:
-            print('Dataset {} not found. Skipping...'.format(i))
-            continue
-
-        # read in the data and label
-        table = pd.read_csv(label_fn)
-        data, ptr = io_utils.read_dataset(data_fn, unpack=True)
-
-        # compute some derived labels
-        table = calculate_derived_properties(table)
-
-        loop = tqdm(range(len(table)))
-
-        for pid in loop:
-            loop.set_description(f'Processing pid {pid}')
-            phi1 = data['phi1'][pid]
-            phi2 = data['phi2'][pid]
-            pm1 = data['pm1'][pid]
-            pm2 = data['pm2'][pid]
-            vr = data['vr'][pid]
-            dist = data['dist'][pid]
-            feat = np.stack([phi2, pm1, pm2, vr, dist], axis=1)
-            label = table[labels].iloc[pid].values
-
-            # ignore out of bounds labels
-            if bounds is not None:
-                is_bound = True
-                for key in bounds.keys():
-                    lo, hi = bounds[key]
-                    is_bound &= (label[key] > lo) & (label[key] < hi)
-                if not is_bound:
-                    continue
-            label = label.values
-
             # TODO: figure out how to deal with t in the particle case
             for _ in range(num_subsamples):
                 # subsample the stream
                 phi1_subsample, feat_subsample = preprocess_utils.subsample_stream(
                     phi1, feat, subsample_factor=subsample_factor)
 
-                x.append(feat_subsample)
-                y.append(label)
-                t.append(phi1_subsample.reshape(-1, 1))
+                if num_bins > 0:
+                    # bin the stream
+                    phi1_bin_centers, feat_mean, feat_stdv = preprocess_utils.bin_stream(
+                        phi1_subsample, feat_subsample, num_bins=num_bins)
 
+                    x.append(np.concatenate([feat_mean, feat_stdv], axis=1))
+                    y.append(label)
+                    t.append(phi1_bin_centers.reshape(-1, 1))
+                else:
+                    # TODO: figure out how to deal with t in the particle case
+                    # no binning, particle-level data
+                    x.append(feat_subsample)
+                    y.append(label)
+                    t.append(phi1_subsample.reshape(-1, 1))
 
     x, padding_mask = preprocess_utils.pad_and_create_mask(x)
     t, _ = preprocess_utils.pad_and_create_mask(t)
     y = np.stack(y, axis=0)
 
     return x, y, t, padding_mask
+
 
 def prepare_dataloader(
     data: Tuple,
