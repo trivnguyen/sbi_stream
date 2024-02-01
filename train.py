@@ -21,8 +21,6 @@ logging.set_verbosity(logging.INFO)
 def train(
     config: ml_collections.ConfigDict, workdir: str = "./logging/"
 ):
-    pl.seed_everything(config.seed)
-
     # set up work directory
     if not hasattr(config, "name"):
         name = utils.get_random_name()
@@ -30,15 +28,21 @@ def train(
         name = config["name"]
     logging.info("Starting training run {} at {}".format(name, workdir))
 
+    # set up random seed
+    pl.seed_everything(config.seed)
+
     workdir = os.path.join(workdir, name)
+    checkpoint_path = None
     if os.path.exists(workdir):
-        if os.overwrite:
+        if config.overwrite:
             shutil.rmtree(workdir)
+        elif config.get('checkpoint', None) is not None:
+            checkpoint_path = os.path.join(
+                workdir, 'lightning_logs/checkpoints', config.checkpoint)
         else:
             raise ValueError(
                 f"Workdir {workdir} already exists. Please set overwrite=True "
                 "to overwrite the existing directory.")
-
 
     # read in the dataset and prepare the data loader for training
     data_dir = os.path.join(config.data.root, config.data.name)
@@ -51,8 +55,20 @@ def train(
             data = pickle.load(f)
     else:
         logging.info("Processing raw data from %s", data_dir)
-        data = datasets.read_process_binned_dataset(
-            data_dir, config.data.labels, config.data.num_bins)
+
+        if config.data.num_bins > 0:
+            data = datasets.read_process_binned_dataset(
+                data_dir, config.data.labels, config.data.num_bins,
+                config.data.num_datasets,
+                bounds=config.data.get("label_bounds", None),
+            )
+        else:
+            data = datasets.read_process_part_dataset(
+                data_dir, config.data.labels, config.data.num_datasets,
+                num_subsamples=config.data.num_subsamples,
+                subsample_factor=config.data.subsample_factor,
+                bounds=config.data.get("label_bounds", None),
+            )
 
         logging.info("Saving processed data to %s", data_processed_path)
         with open(data_processed_path, "wb") as f:
@@ -102,7 +118,7 @@ def train(
     logging.info("Training model...")
     trainer.fit(
         model, train_loader, val_loader,
-        ckpt_path=config.get("checkpoint_path", None),
+        ckpt_path=checkpoint_path
     )
 
 if __name__ == "__main__":

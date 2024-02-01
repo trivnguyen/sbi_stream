@@ -12,10 +12,23 @@ from tqdm import tqdm
 
 from . import io_utils, preprocess_utils
 
+def calculate_derived_properties(table):
+    ''' Calculate derived properties that are not stored in the dataset '''
+    table['log_M_sat'] = np.log10(table['M_sat'])
+    table['log_rs_sat'] = np.log10(table['rs_sat'])
+    table['sin_phi'] = np.sin(table['phi'] / 360 * 2 * np.pi)
+    table['cos_phi'] = np.cos(table['phi'] / 360 * 2 * np.pi)
+    table['r_sin_phi'] = table['r'] * table['sin_phi']
+    table['r_cos_phi'] = table['r'] * table['cos_phi']
+    table['vz_abs'] = np.abs(table['vz'])
+    table['vphi_abs'] = np.abs(table['vphi'])
+    table['vtotal'] = np.sqrt(table['vphi']**2 + table['vz']**2)
+    return table
 
+# TODO: combine read_process_binned_dataset and read_process_part_dataset into one
 def read_process_binned_dataset(
     data_dir: Union[str, Path], labels: List[str], num_bins: int,
-    num_datasets: int = 1
+    num_datasets: int = 1, bounds: dict = None
     ):
     """ Read the dataset and process into a binned dataset
 
@@ -27,6 +40,10 @@ def read_process_binned_dataset(
         List of labels to use for the regression.
     num_bins : int
         Number of bins to use for binning the stream.
+    num_datasets : int, optional
+        Number of datasets to read in. Default is 1.
+    bounds : dict, optional
+        Dictionary containing the bounds for each label. Default is None.
     """
     x, y, t = [], [], []
 
@@ -45,8 +62,7 @@ def read_process_binned_dataset(
         data, ptr = io_utils.read_dataset(data_fn, unpack=True)
 
         # compute some derived labels
-        table['log_M_sat'] = np.log10(table['M_sat'])
-        table['log_rs_sat'] = np.log10(table['rs_sat'])
+        table = calculate_derived_properties(table)
 
         loop = tqdm(range(len(table)))
 
@@ -59,7 +75,17 @@ def read_process_binned_dataset(
             vr = data['vr'][pid]
             dist = data['dist'][pid]
             feat = np.stack([phi2, pm1, pm2, vr, dist], axis=1)
-            label = table[labels].iloc[pid].values
+            label = table[labels].iloc[pid]
+
+            # ignore out of bounds labels
+            if bounds is not None:
+                is_bound = True
+                for key in bounds.keys():
+                    lo, hi = bounds[key]
+                    is_bound &= (label[key] > lo) & (label[key] < hi)
+                if not is_bound:
+                    continue
+            label = label.values
 
             # bin the stream
             phi1_bin_centers, feat_mean, feat_stdv = preprocess_utils.bin_stream(
@@ -77,7 +103,10 @@ def read_process_binned_dataset(
 
 
 def read_process_part_dataset(
-    data_dir: Union[str, Path], labels: List[str]):
+    data_dir: Union[str, Path], labels: List[str],
+    num_datasets: int = 1, num_subsamples: int = 1,
+    subsample_factor: int = 1, bounds: dict = None
+    ):
     """ Read dataset and process into a particle dataset """
 
     x, y, t = [], [], []
@@ -97,8 +126,7 @@ def read_process_part_dataset(
         data, ptr = io_utils.read_dataset(data_fn, unpack=True)
 
         # compute some derived labels
-        table['log_M_sat'] = np.log10(table['M_sat'])
-        table['log_rs_sat'] = np.log10(table['rs_sat'])
+        table = calculate_derived_properties(table)
 
         loop = tqdm(range(len(table)))
 
@@ -113,17 +141,32 @@ def read_process_part_dataset(
             feat = np.stack([phi2, pm1, pm2, vr, dist], axis=1)
             label = table[labels].iloc[pid].values
 
-            x.append(feat)
-            y.append(label)
-            t.append(phi1_bin_centers.reshape(-1, 1))
+            # ignore out of bounds labels
+            if bounds is not None:
+                is_bound = True
+                for key in bounds.keys():
+                    lo, hi = bounds[key]
+                    is_bound &= (label[key] > lo) & (label[key] < hi)
+                if not is_bound:
+                    continue
+            label = label.values
+
+            # TODO: figure out how to deal with t in the particle case
+            for _ in range(num_subsamples):
+                # subsample the stream
+                phi1_subsample, feat_subsample = preprocess_utils.subsample_stream(
+                    phi1, feat, subsample_factor=subsample_factor)
+
+                x.append(feat_subsample)
+                y.append(label)
+                t.append(phi1_subsample.reshape(-1, 1))
+
 
     x, padding_mask = preprocess_utils.pad_and_create_mask(x)
     t, _ = preprocess_utils.pad_and_create_mask(t)
     y = np.stack(y, axis=0)
 
     return x, y, t, padding_mask
-
-
 
 def prepare_dataloader(
     data: Tuple,
