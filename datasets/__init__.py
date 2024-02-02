@@ -80,17 +80,17 @@ def read_process_dataset(
             vr = data['vr'][pid]
             dist = data['dist'][pid]
             feat = np.stack([phi2, pm1, pm2, vr, dist], axis=1)
-            label = table[labels].iloc[pid]
 
             # ignore out of bounds labels
             if bounds is not None:
                 is_bound = True
                 for key in bounds.keys():
                     lo, hi = bounds[key]
-                    is_bound &= (label[key] > lo) & (label[key] < hi)
+                    l = table[labels].iloc[pid]
+                    is_bound &= (l > lo) & (l < hi)
                 if not is_bound:
                     continue
-            label = label.values
+            label = table[labels].iloc[pid].values
 
             # TODO: figure out how to deal with t in the particle case
             for _ in range(num_subsamples):
