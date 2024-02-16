@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 import pytorch_lightning as pl
 import torch
+from absl import flags, logging
 from torch.utils.data import DataLoader, TensorDataset
 from tqdm import tqdm
 
@@ -86,7 +87,7 @@ def read_process_dataset(
                 is_bound = True
                 for key in bounds.keys():
                     lo, hi = bounds[key]
-                    l = table[labels].iloc[pid]
+                    l = table[key].iloc[pid]
                     is_bound &= (l > lo) & (l < hi)
                 if not is_bound:
                     continue
@@ -112,6 +113,8 @@ def read_process_dataset(
                     x.append(feat_subsample)
                     y.append(label)
                     t.append(phi1_subsample.reshape(-1, 1))
+
+    logging.info('Total number of samples: {}'.format(len(x)))
 
     x, padding_mask = preprocess_utils.pad_and_create_mask(x)
     t, _ = preprocess_utils.pad_and_create_mask(t)
