@@ -57,7 +57,7 @@ def train(
     else:
         logging.info("Processing raw data from %s", data_processed_dir)
         data = datasets.read_process_dataset(
-            data_dir, config.data.labels, config.data.num_bins,
+            data_processed_dir, config.data.labels, config.data.num_bins,
             phi1_min=config.data.get("phi1_min"),
             phi1_max=config.data.get("phi1_max"),
             num_datasets=config.data.get("num_datasets", 1),
