@@ -45,8 +45,9 @@ def train(
                 "to overwrite the existing directory.")
 
     # read in the dataset and prepare the data loader for training
-    data_dir = os.path.join(config.data.root, config.data.name)
-    data_processed_path = os.path.join(data_dir, f"processed/{name}.pkl")
+    data_processed_dir = os.path.join(
+        config.data.root_processed, config.data.name, 'processed')
+    data_processed_path = os.path.join(data_processed_dir, f"{name}.pkl")
     os.makedirs(os.path.dirname(data_processed_path), exist_ok=True)
 
     if os.path.exists(data_processed_path):
@@ -54,7 +55,7 @@ def train(
         with open(data_processed_path, "rb") as f:
             data = pickle.load(f)
     else:
-        logging.info("Processing raw data from %s", data_dir)
+        logging.info("Processing raw data from %s", data_processed_dir)
         data = datasets.read_process_dataset(
             data_dir, config.data.labels, config.data.num_bins,
             phi1_min=config.data.get("phi1_min"),
