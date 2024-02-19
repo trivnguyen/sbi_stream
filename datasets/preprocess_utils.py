@@ -1,12 +1,16 @@
 
 import numpy as np
 
-def bin_stream(phi1: np.ndarray, feat: np.ndarray, num_bins: int):
+def bin_stream(
+    phi1: np.ndarray, feat: np.ndarray, num_bins: int,
+    phi1_min: float = None, phi1_max: float = None
+):
     """ Bin the stream along the phi1 coordinates and compute the mean and stdv
     of the features in each bin. """
 
-    phi1_min, phi2_max = phi1.min(), phi1.max()
-    phi1_bins = np.linspace(phi1_min, phi2_max, num_bins + 1)
+    phi1_min = phi1_min or phi1.min()
+    phi1_max = phi1_max or phi1.max()
+    phi1_bins = np.linspace(phi1_min, phi1_max, num_bins + 1)
     phi1_bin_centers = 0.5 * (phi1_bins[1:] + phi1_bins[:-1])
 
     feat_mean = np.zeros((num_bins, feat.shape[1]))

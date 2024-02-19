@@ -29,6 +29,7 @@ def calculate_derived_properties(table):
 
 def read_process_dataset(
     data_dir: Union[str, Path], labels: List[str], num_bins: int,
+    phi1_min: float = None, phi1_max: float = None,
     num_datasets: int = 1, num_subsamples: int = 1,
     subsample_factor: int = 1, bounds: dict = None,
 ):
@@ -42,6 +43,10 @@ def read_process_dataset(
         List of labels to use for the regression.
     num_bins : int
         Number of bins to use for binning the stream.
+    phi1_min : float, optional
+        Minimum value of phi1 to use. Default is None.
+    phi1_max : float, optional
+        Maximum value of phi1 to use. Default is None.
     num_datasets : int, optional
         Number of datasets to read in. Default is 1.
     num_subsamples : int, optional
@@ -102,7 +107,12 @@ def read_process_dataset(
                 if num_bins > 0:
                     # bin the stream
                     phi1_bin_centers, feat_mean, feat_stdv = preprocess_utils.bin_stream(
-                        phi1_subsample, feat_subsample, num_bins=num_bins)
+                        phi1_subsample, feat_subsample, num_bins=num_bins,
+                        phi1_min=phi1_min, phi1_max=phi1_max)
+
+                    if len(phi1_bin_centers) == 0:
+                        print('hello')
+                        continue
 
                     x.append(np.concatenate([feat_mean, feat_stdv], axis=1))
                     y.append(label)
@@ -135,23 +145,25 @@ def prepare_dataloader(
     """ Create dataloaders for training and evaluation. """
     pl.seed_everything(seed)
 
-    # unpack the data and convert to tensor
+    # unpack the data and shuffle
     x, y, t, padding_mask = data
     num_train = int(train_frac * len(x))
     shuffle = np.random.permutation(len(x))
-    x = torch.tensor(x[shuffle], dtype=torch.float32)
-    y = torch.tensor(y[shuffle], dtype=torch.float32)
-    t = torch.tensor(t[shuffle], dtype=torch.float32)
-    padding_mask = torch.tensor(padding_mask[shuffle], dtype=torch.bool)
+    x = x[shuffle]
+    y = y[shuffle]
+    t = t[shuffle]
 
     # normalize the data
     if norm_dict is None:
-        x_loc = x[:num_train].mean(dim=0)
-        x_scale = x[:num_train].std(dim=0)
-        y_loc = y[:num_train].mean(dim=0)
-        y_scale = y[:num_train].std(dim=0)
-        t_loc = t[:num_train].mean(dim=0)
-        t_scale = t[:num_train].std(dim=0)
+        # norm mask for x
+        mask = np.repeat(~padding_mask[:num_train, :, None], x.shape[-1], axis=-1)
+        x_loc = x[:num_train].mean(axis=(0, 1), where=mask)
+        x_scale = x[:num_train].std(axis=(0, 1), where=mask)
+        y_loc = y[:num_train].mean(axis=0)
+        y_scale = y[:num_train].std(axis=0)
+        # normalize time by min-max scaling
+        t_loc = t[:num_train].min()
+        t_scale = t[:num_train].max() - t_loc
         norm_dict = {
             "x_loc": x_loc, "x_scale": x_scale,
             "y_loc": y_loc, "y_scale": y_scale,
@@ -167,6 +179,12 @@ def prepare_dataloader(
     x = (x - x_loc) / x_scale
     y = (y - y_loc) / y_scale
     t = (t - t_loc) / t_scale
+
+    # convert to tensors
+    x = torch.tensor(x, dtype=torch.float32)
+    y = torch.tensor(y, dtype=torch.float32)
+    t = torch.tensor(t, dtype=torch.float32)
+    padding_mask = torch.tensor(padding_mask, dtype=torch.bool)
 
     # create data loader
     train_dset = TensorDataset(

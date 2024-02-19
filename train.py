@@ -57,6 +57,8 @@ def train(
         logging.info("Processing raw data from %s", data_dir)
         data = datasets.read_process_dataset(
             data_dir, config.data.labels, config.data.num_bins,
+            phi1_min=config.data.get("phi1_min"),
+            phi1_max=config.data.get("phi1_max"),
             num_datasets=config.data.get("num_datasets", 1),
             num_subsamples=config.data.get("num_subsamples", 1),
             subsample_factor=config.data.get("subsample_factor", 1),
@@ -93,9 +95,8 @@ def train(
         pl.callbacks.ModelCheckpoint(
             monitor=config.monitor, save_top_k=config.save_top_k,
             mode=config.mode, save_weights_only=False),
-        pl.callbacks.LearningRateMonitor("epoch"),
+        pl.callbacks.LearningRateMonitor("step"),
     ]
-
     train_logger = pl_loggers.TensorBoardLogger(workdir, version='')
     trainer = pl.Trainer(
         default_root_dir=workdir,
