@@ -1,2 +1,3 @@
 # sbi_stream
-SBI for fitting stream-subhalo interaction'
+SBI for fitting stream-subhalo interaction
+
