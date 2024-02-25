@@ -50,14 +50,16 @@ def train(
     data_processed_path = os.path.join(data_processed_dir, f"{name}.pkl")
     os.makedirs(os.path.dirname(data_processed_path), exist_ok=True)
 
+    data_raw_dir = os.path.join(config.data.root, config.data.name)
+
     if os.path.exists(data_processed_path):
         logging.info("Loading processed data from %s", data_processed_path)
         with open(data_processed_path, "rb") as f:
             data = pickle.load(f)
     else:
-        logging.info("Processing raw data from %s", data_processed_dir)
+        logging.info("Processing raw data from %s", data_raw_dir)
         data = datasets.read_process_dataset(
-            data_processed_dir, config.data.labels, config.data.num_bins,
+            data_raw_dir, config.data.labels, config.data.num_bins,
             phi1_min=config.data.get("phi1_min"),
             phi1_max=config.data.get("phi1_max"),
             num_datasets=config.data.get("num_datasets", 1),
