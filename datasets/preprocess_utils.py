@@ -3,10 +3,11 @@ import numpy as np
 
 def bin_stream(
     phi1: np.ndarray, feat: np.ndarray, num_bins: int,
-    phi1_min: float = None, phi1_max: float = None
+    phi1_min: float = None, phi1_max: float = None, count = False
 ):
     """ Bin the stream along the phi1 coordinates and compute the mean and stdv
     of the features in each bin. """
+    """ When count = True, add feature: number of stars in bin"""
 
     phi1_min = phi1_min or phi1.min()
     phi1_max = phi1_max or phi1.max()
@@ -15,12 +16,17 @@ def bin_stream(
 
     feat_mean = np.zeros((num_bins, feat.shape[1]))
     feat_stdv = np.zeros((num_bins, feat.shape[1]))
+    if count:
+        feat_count = np.zeros((num_bins, 1))
+
     for i in range(num_bins):
         mask = (phi1 >= phi1_bins[i]) & (phi1 <= phi1_bins[i + 1])
         if mask.sum() <= 1:
             continue
         feat_mean[i] = feat[mask].mean(axis=0)
         feat_stdv[i] = feat[mask].std(axis=0)
+        if count:
+            feat_count[i] = mask.sum()
 
     # TODO: find a better to handle this case
     # remove bins with no data
@@ -28,8 +34,13 @@ def bin_stream(
     phi1_bin_centers = phi1_bin_centers[mask]
     feat_mean = feat_mean[mask]
     feat_stdv = feat_stdv[mask]
+    if count:
+        feat_count = feat_count[mask]
 
-    return phi1_bin_centers, feat_mean, feat_stdv
+    if count:
+        return phi1_bin_centers, feat_mean, feat_stdv, feat_count
+    else:
+        return phi1_bin_centers, feat_mean, feat_stdv
 
 def pad_and_create_mask(features, max_len=None):
     """ Pad and create Transformer mask. """

@@ -31,7 +31,8 @@ def read_process_dataset(
     data_dir: Union[str, Path], labels: List[str], num_bins: int,
     phi1_min: float = None, phi1_max: float = None,
     num_datasets: int = 1, num_subsamples: int = 1,
-    subsample_factor: int = 1, bounds: dict = None,
+    subsample_factor: int = 1, bounds: dict = None, 
+    frac = False
 ):
     """ Read the dataset and preprocess
 
@@ -55,6 +56,10 @@ def read_process_dataset(
         Factor to subsample the data. Default is 1.
     bounds : dict, optional
         Dictionary containing the bounds for each label. Default is None.
+    frac: bool, optional
+        If True, read datasets with two additional features:
+        number and fraction of stars in each bin. 
+        Default is False.
     """
     x, y, t = [], [], []
 
@@ -106,7 +111,14 @@ def read_process_dataset(
 
                 if num_bins > 0:
                     # bin the stream
-                    phi1_bin_centers, feat_mean, feat_stdv = preprocess_utils.bin_stream(
+                    if frac:
+                        phi1_bin_centers, feat_mean, feat_stdv, feat_count = preprocess_utils.bin_stream(
+                        phi1_subsample, feat_subsample, num_bins=num_bins,
+                        phi1_min=phi1_min, phi1_max=phi1_max, count=True)
+
+                        feat_frac = feat_count/len(phi1)
+                    else: 
+                        phi1_bin_centers, feat_mean, feat_stdv = preprocess_utils.bin_stream(
                         phi1_subsample, feat_subsample, num_bins=num_bins,
                         phi1_min=phi1_min, phi1_max=phi1_max)
 
@@ -114,7 +126,10 @@ def read_process_dataset(
                         print('hello')
                         continue
 
-                    x.append(np.concatenate([feat_mean, feat_stdv], axis=1))
+                    if frac: 
+                        x.append(np.concatenate([feat_mean, feat_stdv, feat_count, feat_frac], axis=1))
+                    else: 
+                        x.append(np.concatenate([feat_mean, feat_stdv], axis=1))
                     y.append(label)
                     t.append(phi1_bin_centers.reshape(-1, 1))
                 else:
@@ -132,6 +147,60 @@ def read_process_dataset(
 
     return x, y, t, padding_mask
 
+def read_raw_dataset(
+    data_dir: Union[str, Path], labels: List[str],
+    phi1_min: float = None, phi1_max: float = None,
+    num_datasets: int = 1
+):
+    """ Read raw data
+
+    Parameters
+    ----------
+    data_dir : str
+        Path to the directory containing the stream data.
+    labels : list of str
+        List of labels to use for the regression.
+    phi1_min : float, optional
+        Minimum value of phi1 to use. Default is None.
+    phi1_max : float, optional
+        Maximum value of phi1 to use. Default is None.
+    num_datasets : int, optional
+        Number of datasets to read in. Default is 1.
+    """
+
+    raw = []
+
+    for i in range(num_datasets):
+        label_fn = os.path.join(data_dir, f'labels.{i}.csv')
+        data_fn = os.path.join(data_dir, f'data.{i}.hdf5')
+
+        if os.path.exists(label_fn) & os.path.exists(data_fn):
+            print('Reading in data from {}'.format(data_fn))
+        else:
+            print('Dataset {} not found. Skipping...'.format(i))
+            continue
+
+        # read in the data and label
+        table = pd.read_csv(label_fn)
+        data, ptr = io_utils.read_dataset(data_fn, unpack=True)
+
+        # compute some derived labels
+        table = calculate_derived_properties(table)
+
+        loop = tqdm(range(len(table)))
+
+        for pid in loop:
+            loop.set_description(f'Processing pid {pid}')
+            phi1 = data['phi1'][pid]
+            phi2 = data['phi2'][pid]
+            pm1 = data['pm1'][pid]
+            pm2 = data['pm2'][pid]
+            vr = data['vr'][pid]
+            dist = data['dist'][pid]
+
+            raw.append(np.stack([phi1, phi2, pm1, pm2, vr, dist]))
+
+    return raw
 
 def prepare_dataloader(
     data: Tuple,
