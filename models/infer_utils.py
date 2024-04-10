@@ -44,8 +44,13 @@ def sample(
     labels = np.concatenate(labels, axis=0)
 
     if norm_dict is not None:
-        y_loc = norm_dict['y_loc'].cpu().numpy()
-        y_scale = norm_dict['y_scale'].cpu().numpy()
+        y_loc = norm_dict['y_loc']
+        y_scale = norm_dict['y_scale']
+        if isinstance(y_loc, torch.Tensor):
+            y_loc = y_loc.cpu().numpy()
+        if isinstance(y_scale, torch.Tensor):
+            y_scale = y_scale.cpu().numpy()
+
         samples = samples * y_scale + y_loc
         labels = labels * y_scale + y_loc
 
