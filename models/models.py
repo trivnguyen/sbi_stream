@@ -87,7 +87,7 @@ class TransformerFeaturizer(nn.Module):
                 # the transformer encoder changes the length of the output to
                 # match the max non-padded length in the batch
                 max_seq_len = torch.max(padding_mask.eq(0).sum(-1))
-                padding_mask = padding_mask[:, :max_seq_len]
+                # padding_mask = padding_mask[:, :max_seq_len]
             output = output.masked_fill(padding_mask.unsqueeze(-1), 0)
             output = output.sum(dim=1)
 
