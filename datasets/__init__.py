@@ -31,7 +31,8 @@ def read_process_dataset(
     data_dir: Union[str, Path], labels: List[str], num_bins: int,
     phi1_min: float = None, phi1_max: float = None,
     num_datasets: int = 1, num_subsamples: int = 1,
-    subsample_factor: int = 1, bounds: dict = None,
+    subsample_factor: int = 1, bounds: dict = None, 
+    frac = False
 ):
     """ Read the dataset and preprocess
 
@@ -55,6 +56,10 @@ def read_process_dataset(
         Factor to subsample the data. Default is 1.
     bounds : dict, optional
         Dictionary containing the bounds for each label. Default is None.
+    frac: bool, optional
+        If True, read datasets with two additional features:
+        number and fraction of stars in each bin. 
+        Default is False.
     """
     x, y, t = [], [], []
 
@@ -106,15 +111,18 @@ def read_process_dataset(
 
                 if num_bins > 0:
                     # bin the stream
-                    phi1_bin_centers, feat_mean, feat_stdv = preprocess_utils.bin_stream(
+                    phi1_bin_centers, feat_mean, feat_stdv, feat_count = preprocess_utils.bin_stream(
                         phi1_subsample, feat_subsample, num_bins=num_bins,
                         phi1_min=phi1_min, phi1_max=phi1_max)
 
                     if len(phi1_bin_centers) == 0:
-                        print('hello')
                         continue
 
-                    x.append(np.concatenate([feat_mean, feat_stdv], axis=1))
+                    if frac: 
+                        feat_frac = feat_count / len(phi1)
+                        x.append(np.concatenate([feat_mean, feat_stdv, feat_frac], axis=1))
+                    else: 
+                        x.append(np.concatenate([feat_mean, feat_stdv], axis=1))
                     y.append(label)
                     t.append(phi1_bin_centers.reshape(-1, 1))
                 else:
@@ -131,7 +139,6 @@ def read_process_dataset(
     y = np.stack(y, axis=0)
 
     return x, y, t, padding_mask
-
 
 def prepare_dataloader(
     data: Tuple,
