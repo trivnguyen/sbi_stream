@@ -13,6 +13,9 @@ from tqdm import tqdm
 
 from . import io_utils, preprocess_utils
 
+DEFAULT_LABELS = ['log_M_sat', 'vz']
+DEFAULT_FEATURES = ['phi2', 'pm1', 'pm2', 'vr', 'dist']
+
 def calculate_derived_properties(table):
     ''' Calculate derived properties that are not stored in the dataset '''
     table['log_M_sat'] = np.log10(table['M_sat'])
@@ -28,11 +31,11 @@ def calculate_derived_properties(table):
 
 
 def read_process_dataset(
-    data_dir: Union[str, Path], labels: List[str], num_bins: int,
-    phi1_min: float = None, phi1_max: float = None,
+    data_dir: Union[str, Path], features: List[str] = None, labels: List[str] = None,
+    num_bins: int = 10, phi1_min: float = None, phi1_max: float = None,
     num_datasets: int = 1, num_subsamples: int = 1,
-    subsample_factor: int = 1, bounds: dict = None, 
-    frac = False
+    subsample_factor: int = 1, bounds: dict = None,
+    frac: bool = False
 ):
     """ Read the dataset and preprocess
 
@@ -58,10 +61,16 @@ def read_process_dataset(
         Dictionary containing the bounds for each label. Default is None.
     frac: bool, optional
         If True, read datasets with two additional features:
-        number and fraction of stars in each bin. 
+        number and fraction of stars in each bin.
         Default is False.
     """
     x, y, t = [], [], []
+
+    # default features and labels
+    if labels is None:
+        labels = DEFAULT_LABELS
+    if features is None:
+        features = DEFAULT_FEATURES
 
     for i in range(num_datasets):
         label_fn = os.path.join(data_dir, f'labels.{i}.csv')
@@ -85,12 +94,7 @@ def read_process_dataset(
         for pid in loop:
             loop.set_description(f'Processing pid {pid}')
             phi1 = data['phi1'][pid]
-            phi2 = data['phi2'][pid]
-            pm1 = data['pm1'][pid]
-            pm2 = data['pm2'][pid]
-            vr = data['vr'][pid]
-            dist = data['dist'][pid]
-            feat = np.stack([phi2, pm1, pm2, vr, dist], axis=1)
+            feat = np.stack([data[f][pid] for f in features], axis=1)
 
             # ignore out of bounds labels
             if bounds is not None:
@@ -118,10 +122,11 @@ def read_process_dataset(
                     if len(phi1_bin_centers) == 0:
                         continue
 
-                    if frac: 
-                        feat_frac = feat_count / len(phi1)
+                    if frac:
+                        num_total = np.count_nonzero((phi1_min <= phi1) & (phi1 <= phi1_max))
+                        feat_frac = feat_count / num_total
                         x.append(np.concatenate([feat_mean, feat_stdv, feat_frac], axis=1))
-                    else: 
+                    else:
                         x.append(np.concatenate([feat_mean, feat_stdv], axis=1))
                     y.append(label)
                     t.append(phi1_bin_centers.reshape(-1, 1))
