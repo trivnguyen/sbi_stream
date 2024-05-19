@@ -59,13 +59,17 @@ def train(
     else:
         logging.info("Processing raw data from %s", data_raw_dir)
         data = datasets.read_process_dataset(
-            data_raw_dir, config.data.labels, config.data.num_bins,
+            data_raw_dir,
+            features=config.data.features,
+            labels=config.data.labels,
+            num_bins=config.data.num_bins,
             phi1_min=config.data.get("phi1_min"),
             phi1_max=config.data.get("phi1_max"),
             num_datasets=config.data.get("num_datasets", 1),
             num_subsamples=config.data.get("num_subsamples", 1),
             subsample_factor=config.data.get("subsample_factor", 1),
-            bounds=config.data.get("label_bounds", None)
+            bounds=config.data.get("label_bounds", None),
+            frac=config.data.get('frac', False)
         )
         logging.info("Saving processed data to %s", data_processed_path)
         with open(data_processed_path, "wb") as f:
@@ -97,6 +101,7 @@ def train(
             verbose=True),
         pl.callbacks.ModelCheckpoint(
             monitor=config.monitor, save_top_k=config.save_top_k,
+            filename='{epoch}-{step}-{train_loss:.4f}-{val_loss:.4f}',
             mode=config.mode, save_weights_only=False),
         pl.callbacks.LearningRateMonitor("step"),
     ]
