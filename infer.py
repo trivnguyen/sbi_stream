@@ -45,8 +45,10 @@ def infer(config: ml_collections.ConfigDict, workdir: str = "./logging/"):
         return_labels=True, norm_dict=norm_dict)
 
     # save samples and labels
-    samples_path = os.path.join(
-        config.workdir, config.name)
+    samples_path = os.path.join(config.workdir, config.name)
+    with open('6params_results.pkl', 'wb') as f:
+        data = {'samples': samples, 'labels': labels}
+        pickle.dump(data, f, protocol=pickle.HIGHEST_PROTOCOL)
 
 
 if __name__ == "__main__":
