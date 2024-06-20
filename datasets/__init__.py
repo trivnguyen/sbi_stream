@@ -16,6 +16,7 @@ from . import io_utils, preprocess_utils
 DEFAULT_LABELS = ['log_M_sat', 'vz']
 DEFAULT_FEATURES = ['phi2', 'pm1', 'pm2', 'vr', 'dist']
 
+
 def calculate_derived_properties(table):
     ''' Calculate derived properties that are not stored in the dataset '''
     table['log_M_sat'] = np.log10(table['M_sat'])
@@ -32,8 +33,7 @@ def calculate_derived_properties(table):
 
 def read_process_dataset(
     data_dir: Union[str, Path], features: List[str] = None, labels: List[str] = None,
-    num_bins: int = 10, phi1_min: float = None, phi1_max: float = None,
-    num_datasets: int = 1, num_subsamples: int = 1,
+    binning_fn: str = None, binning_args: dict = None, num_datasets: int = 1, num_subsamples: int = 1,
     subsample_factor: int = 1, bounds: dict = None,
     frac: bool = False
 ):
@@ -45,12 +45,10 @@ def read_process_dataset(
         Path to the directory containing the stream data.
     labels : list of str
         List of labels to use for the regression.
-    num_bins : int
-        Number of bins to use for binning the stream.
-    phi1_min : float, optional
-        Minimum value of phi1 to use. Default is None.
-    phi1_max : float, optional
-        Maximum value of phi1 to use. Default is None.
+    binning_fn: str
+        The binning function
+    binning_args: dict
+        Args of the binning function
     num_datasets : int, optional
         Number of datasets to read in. Default is 1.
     num_subsamples : int, optional
@@ -64,13 +62,12 @@ def read_process_dataset(
         number and fraction of stars in each bin.
         Default is False.
     """
-    x, y, t = [], [], []
+    # default args
+    labels = labels or DEFAULT_LABELS
+    features = features or DEFAULT_FEATURES
+    binning_args = binning_args or {}
 
-    # default features and labels
-    if labels is None:
-        labels = DEFAULT_LABELS
-    if features is None:
-        features = DEFAULT_FEATURES
+    x, y, t = [], [], []
 
     for i in range(num_datasets):
         label_fn = os.path.join(data_dir, f'labels.{i}.csv')
@@ -94,6 +91,7 @@ def read_process_dataset(
         for pid in loop:
             loop.set_description(f'Processing pid {pid}')
             phi1 = data['phi1'][pid]
+            phi2 = data['phi2'][pid]
             feat = np.stack([data[f][pid] for f in features], axis=1)
 
             # ignore out of bounds labels
@@ -110,26 +108,27 @@ def read_process_dataset(
             # TODO: figure out how to deal with t in the particle case
             for _ in range(num_subsamples):
                 # subsample the stream
-                phi1_subsample, feat_subsample = preprocess_utils.subsample_stream(
-                    phi1, feat, subsample_factor=subsample_factor)
+                phi1_subsample, phi2_subsample, feat_subsample = preprocess_utils.subsample_arrays(
+                    [phi1, phi2, feat], subsample_factor=subsample_factor)
 
-                if num_bins > 0:
+                if binning_fn is not None:
                     # bin the stream
-                    phi1_bin_centers, feat_mean, feat_stdv, feat_count = preprocess_utils.bin_stream(
-                        phi1_subsample, feat_subsample, num_bins=num_bins,
-                        phi1_min=phi1_min, phi1_max=phi1_max)
-
-                    if len(phi1_bin_centers) == 0:
+                    if binning_fn == 'bin_stream':
+                        bin_centers, feat_mean, feat_stdv, feat_count = preprocess_utils.bin_stream(
+                            phi1_subsample, feat_subsample, **binning_args)
+                    elif binning_fn == 'bin_stream_spline':
+                        bin_centers, feat_mean, feat_stdv, feat_count = preprocess_utils.bin_stream_spline(
+                            phi1_subsample, phi2_subsample, feat_subsample, **binning_args)
+                    if len(bin_centers) == 0:
                         continue
 
                     if frac:
-                        num_total = np.count_nonzero((phi1_min <= phi1) & (phi1 <= phi1_max))
-                        feat_frac = feat_count / num_total
+                        feat_frac = feat_count / np.sum(feat_count)
                         x.append(np.concatenate([feat_mean, feat_stdv, feat_frac], axis=1))
                     else:
                         x.append(np.concatenate([feat_mean, feat_stdv], axis=1))
                     y.append(label)
-                    t.append(phi1_bin_centers.reshape(-1, 1))
+                    t.append(bin_centers.reshape(-1, 1))
                 else:
                     # TODO: figure out how to deal with t in the particle case
                     # no binning, particle-level data
@@ -144,6 +143,7 @@ def read_process_dataset(
     y = np.stack(y, axis=0)
 
     return x, y, t, padding_mask
+
 
 def prepare_dataloader(
     data: Tuple,
