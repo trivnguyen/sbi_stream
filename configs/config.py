@@ -4,55 +4,69 @@ from ml_collections import config_dict
 def get_config():
     cfg = config_dict.ConfigDict()
 
-    cfg.seed = 42
+    cfg.seed = 15
 
     # data configuration
     cfg.data = config_dict.ConfigDict()
-    cfg.data.root = 'root'
-    cfg.data.name = ''
-    cfg.data.labels = ['M_sat', 'vz']
-    cfg.data.num_bins = 10
+    cfg.data.root = '/pscratch/sd/t/tvnguyen/stream_sbi/datasets/'
+    cfg.data.root_processed = '/pscratch/sd/t/tvnguyen/stream_sbi/datasets/'
+    cfg.data.name = '6params-n1000'
+    cfg.data.num_datasets = 1
+    cfg.data.labels = ['log_M_sat', 'log_rs_sat', 'vz', 'vphi', 'r_sin_phi', 'r_cos_phi']
+    cfg.data.features = ['phi1', 'phi2', 'pm1', 'pm2', 'vr', 'dist']
+    cfg.data.subsample_factor = 1
+    cfg.data.num_subsamples = 1
+    cfg.data.frac = True
+    cfg.data.binning_fn = 'bin_stream_spline'
+    cfg.data.binning_args = binning = config_dict.ConfigDict()
+    binning.num_bins = 50
+    binning.num_knots = 50
+    binning.phi1_min = -20
+    binning.phi1_max = 12
 
     # logging configuration
-    cfg.workdir = './logging/'
-    cfg.name = 'default'
+    cfg.workdir = '/pscratch/sd/t/tvnguyen/stream_sbi/logging'
     cfg.enable_progress_bar = False
+    cfg.overwrite = False
 
     # training configuration
     # batching and shuffling
     cfg.train_frac = 0.8
-    cfg.train_batch_size = 128
-    cfg.num_workers = 4
+    cfg.train_batch_size = 64
+    cfg.num_workers = 0
+    cfg.eval_batch_size = 64
 
-    # evaluation configuration
-    cfg.eval_batch_size = 128
+    # inference and sampling configuration
+    cfg.infer = config_dict.ConfigDict()
+    cfg.infer.num_samples = 2000
+    cfg.infer.checkpoint = 'best'
 
     # model configuration
     cfg.output_size = len(cfg.data.labels)
     cfg.featurizer = config_dict.ConfigDict()
     cfg.featurizer.name = 'transformer'
-    cfg.featurizer.d_feat_in = 10
+    cfg.featurizer.d_feat_in = len(cfg.data.features) * 2 + int(cfg.data.frac)
     cfg.featurizer.d_time_in = 1
-    cfg.featurizer.d_feat = 32
-    cfg.featurizer.d_time = 32
+    cfg.featurizer.d_feat = 64
+    cfg.featurizer.d_time = 64
     cfg.featurizer.nhead = 4
     cfg.featurizer.num_encoder_layers = 3
-    cfg.featurizer.dim_feedforward = 128
+    cfg.featurizer.dim_feedforward = 256
     cfg.featurizer.batch_first = True
     cfg.featurizer.activation = config_dict.ConfigDict()
     cfg.featurizer.activation.name = 'Identity'
     cfg.flows = config_dict.ConfigDict()
-    cfg.flows.name = 'maf'
-    cfg.flows.hidden_size = 64
-    cfg.flows.num_blocks = 2
+    cfg.flows.zuko = False
+    cfg.flows.hidden_size = 128
     cfg.flows.num_layers = 4
+    cfg.flows.num_blocks = 2
     cfg.flows.activation = config_dict.ConfigDict()
     cfg.flows.activation.name = 'tanh'
 
     # optimizer and scheduler configuration
     cfg.optimizer = config_dict.ConfigDict()
-    cfg.optimizer.name = 'AdamW'
-    cfg.optimizer.lr = 5e-4
+    cfg.optimizer.name = 'Adam'
+    cfg.optimizer.lr = 3e-4
     cfg.optimizer.betas = (0.9, 0.98)
     cfg.optimizer.weight_decay = 1e-4
     cfg.optimizer.eps = 1e-9
