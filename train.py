@@ -14,6 +14,7 @@ from absl import flags, logging
 from ml_collections import config_flags
 
 import datasets
+from models.zuko import regressor as zuko_regressor
 from models import models, regressor, utils
 
 logging.set_verbosity(logging.INFO)
@@ -84,14 +85,24 @@ def train(
     )
 
     # create model
-    model = regressor.Regressor(
-        output_size=config.output_size,
-        featurizer_args=config.featurizer,
-        flows_args=config.flows,
-        optimizer_args=config.optimizer,
-        scheduler_args=config.scheduler,
-        norm_dict=norm_dict,
-    )
+    if config.flows.zuko:
+        model = zuko_regressor.Regressor(
+            output_size=config.output_size,
+            featurizer_args=config.featurizer,
+            flows_args=config.flows,
+            optimizer_args=config.optimizer,
+            scheduler_args=config.scheduler,
+            norm_dict=norm_dict,
+        )
+    else:
+        model = regressor.Regressor(
+            output_size=config.output_size,
+            featurizer_args=config.featurizer,
+            flows_args=config.flows,
+            optimizer_args=config.optimizer,
+            scheduler_args=config.scheduler,
+            norm_dict=norm_dict,
+        )
 
     # create the trainer object
     callbacks = [

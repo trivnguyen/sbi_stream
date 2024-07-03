@@ -3,8 +3,8 @@ import torch
 import torch.nn as nn
 import pytorch_lightning as pl
 
-from . import models, models_utils, flows_utils
-
+from models.zuko import flows_utils
+from models import models, models_utils
 
 class Regressor(pl.LightningModule):
     def __init__(
@@ -12,7 +12,7 @@ class Regressor(pl.LightningModule):
         output_size,
         featurizer_args,
         flows_args,
-        mlp_args,
+        mlp_args=None,
         optimizer_args=None,
         scheduler_args=None,
         d_time=1,
@@ -28,8 +28,8 @@ class Regressor(pl.LightningModule):
             Arguments for the featurizer
         flows_args : dict
             Arguments for the normalizing flow
-        mlp_args: dict
-            Argument for the MLP
+        mlp_args: dict, optional
+            Arguments for the MLP after the featurizer
         optimizer_args : dict, optional
             Arguments for the optimizer. Default: None
         scheduler_args : dict, optional
@@ -88,13 +88,17 @@ class Regressor(pl.LightningModule):
             flows_context_features = self.featurizer.d_model
 
         # create the flows
-        self.flows = flows_utils.build_maf(
+        activation_fn = models_utils.get_activation_zuko(
+            self.flows_args.activation)
+        self.flows = flows_utils.build_flows(
             features=self.output_size,
-            hidden_features=self.flows_args.hidden_size,
+            hidden_features=self.flows_args.hidden_sizes,
             context_features=flows_context_features,
-            num_layers=self.flows_args.num_layers,
-            num_blocks=self.flows_args.num_blocks,
+            num_transforms=self.flows_args.num_transforms,
+            num_bins=self.flows_args.num_bins,
+            activation=activation_fn
         )
+
 
     def _prepare_training_batch(self, batch):
         """ Prepare the batch for training. """
@@ -127,7 +131,7 @@ class Regressor(pl.LightningModule):
         padding_mask = batch_dict['padding_mask']
 
         flow_context = self(x, t, padding_mask=padding_mask)
-        log_prob = self.flows.log_prob(y, context=flow_context)
+        log_prob = self.flows(flow_context).log_prob(y)
         loss = -log_prob.mean()
 
         self.log(
@@ -143,7 +147,7 @@ class Regressor(pl.LightningModule):
         padding_mask = batch_dict['padding_mask']
 
         flow_context = self(x, t, padding_mask=padding_mask)
-        log_prob = self.flows.log_prob(y, context=flow_context)
+        log_prob = self.flows(flow_context).log_prob(y)
         loss = -log_prob.mean()
 
         self.log(
