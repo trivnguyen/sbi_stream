@@ -28,7 +28,7 @@ def calculate_derived_properties(table):
 
 
 def read_process_dataset(
-    data_dir: Union[str, Path], labels: List[str], num_bins: int = 0,
+    data_dir: Union[str, Path], labels: List[str], num_bins: int,
     phi1_min: float = None, phi1_max: float = None,
     num_datasets: int = 1, num_subsamples: int = 1,
     subsample_factor: int = 1, bounds: dict = None, 
@@ -137,7 +137,7 @@ def read_process_dataset(
                     phi1_subsample = phi1_subsample[phi1_mask]
                     sorted_indices = np.argsort(phi1_subsample)
                     sorted_phi1 = phi1_subsample[sorted_indices]
-                    sorted_feat = feat_subsample[sorted_indices, :]
+                    sorted_feat = feat_subsample[:, sorted_indices]
                     
                     phi1_bin_centers, feat_mean, feat_stdv, feat_count = preprocess_utils.bin_spline(
                         sorted_phi1, sorted_feat, num_knots, 
@@ -163,6 +163,7 @@ def read_process_dataset(
     y = np.stack(y, axis=0)
 
     return x, y, t, padding_mask
+
 
 def prepare_dataloader(
     data: Tuple,
@@ -232,3 +233,167 @@ def prepare_dataloader(
         num_workers=num_workers, pin_memory=torch.cuda.is_available())
 
     return train_loader, val_loader, norm_dict
+
+def read_raw_dataset(
+    data_dir: Union[str, Path], labels: List[str],
+    num_datasets: int = 1
+):
+    """ Read raw data
+
+    Parameters
+    ----------
+    data_dir : str
+        Path to the directory containing the stream data.
+    labels : list of str
+        List of labels to use for the regression.
+    num_datasets : int, optional
+        Number of datasets to read in. Default is 1.
+    """
+
+    raw = []
+
+    for i in range(num_datasets):
+        label_fn = os.path.join(data_dir, f'labels.{i}.csv')
+        data_fn = os.path.join(data_dir, f'data.{i}.hdf5')
+
+        if os.path.exists(label_fn) & os.path.exists(data_fn):
+            print('Reading in data from {}'.format(data_fn))
+        else:
+            print('Dataset {} not found. Skipping...'.format(i))
+            continue
+
+        # read in the data and label
+        table = pd.read_csv(label_fn)
+        data, ptr = io_utils.read_dataset(data_fn, unpack=True)
+
+        # compute some derived labels
+        table = calculate_derived_properties(table)
+
+        loop = tqdm(range(len(table)))
+
+        for pid in loop:
+            loop.set_description(f'Processing pid {pid}')
+            phi1 = data['phi1'][pid]
+            phi2 = data['phi2'][pid]
+            pm1 = data['pm1'][pid]
+            pm2 = data['pm2'][pid]
+            vr = data['vr'][pid]
+            dist = data['dist'][pid]
+
+            raw.append(np.stack([phi1, phi2, pm1, pm2, vr, dist]))
+
+    return raw
+
+
+# def read_process_dataset(
+#     data_dir: Union[str, Path], labels: List[str], num_bins: int,
+#     phi1_min: float = None, phi1_max: float = None,
+#     num_datasets: int = 1, num_subsamples: int = 1,
+#     subsample_factor: int = 1, bounds: dict = None, 
+#     frac = False
+# ):
+#     """ Read the dataset and preprocess
+
+#     Parameters
+#     ----------
+#     data_dir : str
+#         Path to the directory containing the stream data.
+#     labels : list of str
+#         List of labels to use for the regression.
+#     num_bins : int
+#         Number of bins to use for binning the stream.
+#     phi1_min : float, optional
+#         Minimum value of phi1 to use. Default is None.
+#     phi1_max : float, optional
+#         Maximum value of phi1 to use. Default is None.
+#     num_datasets : int, optional
+#         Number of datasets to read in. Default is 1.
+#     num_subsamples : int, optional
+#         Number of subsamples to use. Default is 1.
+#     subsample_factor : int, optional
+#         Factor to subsample the data. Default is 1.
+#     bounds : dict, optional
+#         Dictionary containing the bounds for each label. Default is None.
+#     frac: bool, optional
+#         If True, read datasets with two additional features:
+#         number and fraction of stars in each bin. 
+#         Default is False.
+#     """
+#     x, y, t = [], [], []
+
+#     for i in range(num_datasets):
+#         label_fn = os.path.join(data_dir, f'labels.{i}.csv')
+#         data_fn = os.path.join(data_dir, f'data.{i}.hdf5')
+
+#         if os.path.exists(label_fn) & os.path.exists(data_fn):
+#             print('Reading in data from {}'.format(data_fn))
+#         else:
+#             print('Dataset {} not found. Skipping...'.format(i))
+#             continue
+
+#         # read in the data and label
+#         table = pd.read_csv(label_fn)
+#         data, ptr = io_utils.read_dataset(data_fn, unpack=True)
+
+#         # compute some derived labels
+#         table = calculate_derived_properties(table)
+
+#         loop = tqdm(range(len(table)))
+
+#         for pid in loop:
+#             loop.set_description(f'Processing pid {pid}')
+#             phi1 = data['phi1'][pid]
+#             phi2 = data['phi2'][pid]
+#             pm1 = data['pm1'][pid]
+#             pm2 = data['pm2'][pid]
+#             vr = data['vr'][pid]
+#             dist = data['dist'][pid]
+#             feat = np.stack([phi2, pm1, pm2, vr, dist], axis=1)
+
+#             # ignore out of bounds labels
+#             if bounds is not None:
+#                 is_bound = True
+#                 for key in bounds.keys():
+#                     lo, hi = bounds[key]
+#                     l = table[key].iloc[pid]
+#                     is_bound &= (l > lo) & (l < hi)
+#                 if not is_bound:
+#                     continue
+#             label = table[labels].iloc[pid].values
+
+#             # TODO: figure out how to deal with t in the particle case
+#             for _ in range(num_subsamples):
+#                 # subsample the stream
+#                 phi1_subsample, feat_subsample = preprocess_utils.subsample_stream(
+#                     phi1, feat, subsample_factor=subsample_factor)
+
+#                 if num_bins > 0:
+#                     # bin the stream
+#                     phi1_bin_centers, feat_mean, feat_stdv, feat_count = preprocess_utils.bin_stream(
+#                         phi1_subsample, feat_subsample, num_bins=num_bins,
+#                         phi1_min=phi1_min, phi1_max=phi1_max)
+
+#                     if len(phi1_bin_centers) == 0:
+#                         continue
+
+#                     if frac: 
+#                         feat_frac = feat_count / len(phi1)
+#                         x.append(np.concatenate([feat_mean, feat_stdv, feat_frac], axis=1))
+#                     else: 
+#                         x.append(np.concatenate([feat_mean, feat_stdv], axis=1))
+#                     y.append(label)
+#                     t.append(phi1_bin_centers.reshape(-1, 1))
+#                 else:
+#                     # TODO: figure out how to deal with t in the particle case
+#                     # no binning, particle-level data
+#                     x.append(feat_subsample)
+#                     y.append(label)
+#                     t.append(phi1_subsample.reshape(-1, 1))
+
+#     logging.info('Total number of samples: {}'.format(len(x)))
+
+#     x, padding_mask = preprocess_utils.pad_and_create_mask(x)
+#     t, _ = preprocess_utils.pad_and_create_mask(t)
+#     y = np.stack(y, axis=0)
+
+#     return x, y, t, padding_mask

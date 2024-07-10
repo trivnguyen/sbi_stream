@@ -8,17 +8,16 @@ def get_config():
 
     # data configuration
     cfg.data = config_dict.ConfigDict()
-    cfg.data.root = '/mnt/ceph/users/tnguyen/stream_sbi/datasets'
+    cfg.data.root = '/pscratch/sd/t/tvnguyen/stream_sbi/datasets'
     cfg.data.name = '6params-n1000'
     cfg.data.num_datasets = 1
     cfg.data.num_bins = 20
     cfg.data.labels = ['log_M_sat', 'log_rs_sat', 'vz', 'vphi', 'r_sin_phi', 'r_cos_phi']
     cfg.data.label_bounds = config_dict.ConfigDict()
     cfg.data.label_bounds.vtotal = (0, 100)
-    cfg.data.fraction = True
 
     # logging configuration
-    cfg.workdir = '/mnt/ceph/users/tnguyen/stream_sbi/logging'
+    cfg.workdir = '/pscratch/sd/t/tvnguyen/stream_sbi/logging/'
     cfg.enable_progress_bar = False
     cfg.overwrite = True
 

@@ -44,8 +44,8 @@ def sample(
     labels = np.concatenate(labels, axis=0)
 
     if norm_dict is not None:
-        y_loc = norm_dict['y_loc'].cpu().numpy()
-        y_scale = norm_dict['y_scale'].cpu().numpy()
+        y_loc = norm_dict['y_loc']
+        y_scale = norm_dict['y_scale']
         samples = samples * y_scale + y_loc
         labels = labels * y_scale + y_loc
 
@@ -87,7 +87,7 @@ def sample_no_labels(
 
     if norm_dict is not None:
         y_loc = norm_dict['y_loc']
-        y_scale = norm_dict['y_scale'].cpu().numpy()
+        y_scale = norm_dict['y_scale']
         samples = samples * y_scale + y_loc
 
     return samples

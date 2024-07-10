@@ -65,7 +65,9 @@ def train(
             num_datasets=config.data.get("num_datasets", 1),
             num_subsamples=config.data.get("num_subsamples", 1),
             subsample_factor=config.data.get("subsample_factor", 1),
-            bounds=config.data.get("label_bounds", None)
+            bounds=config.data.get("label_bounds", None),
+            frac=config.data.get("fraction", False),
+            num_knots=config.data.get("num_knots", 0)
         )
         logging.info("Saving processed data to %s", data_processed_path)
         with open(data_processed_path, "wb") as f:

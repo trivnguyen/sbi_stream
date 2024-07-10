@@ -8,26 +8,28 @@ def get_config():
 
     # data configuration
     cfg.data = config_dict.ConfigDict()
-    cfg.data.root = '/mnt/ceph/users/tnguyen/stream_sbi/datasets'
-    cfg.data.name = '6params-n1000'
+    cfg.data.root = '/pscratch/sd/t/tvnguyen/stream_sbi/datasets'
+    cfg.data.name = '2params-n1000'
     cfg.data.num_datasets = 1
-    cfg.data.num_bins = 20
-    cfg.data.labels = ['log_M_sat', 'log_rs_sat', 'vz', 'vphi', 'r_sin_phi', 'r_cos_phi']
-    cfg.data.label_bounds = config_dict.ConfigDict()
-    cfg.data.label_bounds.vtotal = (0, 100)
+    cfg.data.num_bins = 10
+    cfg.data.labels = ['log_M_sat', 'vz']
+    cfg.data.phi1_min = -20
+    cfg.data.phi1_max = 12
+    cfg.data.root_processed = '/pscratch/sd/r/rutong/stream_sbi/datasets'
     cfg.data.fraction = True
 
+
     # logging configuration
-    cfg.workdir = '/mnt/ceph/users/tnguyen/stream_sbi/logging'
+    cfg.workdir = '/global/homes/r/rutong/logging/'
     cfg.enable_progress_bar = False
-    cfg.overwrite = True
+    cfg.overwrite = False
 
     # training configuration
     # batching and shuffling
     cfg.train_frac = 0.8
-    cfg.train_batch_size = 1024
-    cfg.num_workers = 4
-    cfg.eval_batch_size = 1024
+    cfg.train_batch_size = 128
+    cfg.num_workers = 1
+    cfg.eval_batch_size = 128
 
     # inference and sampling configuration
     cfg.infer = config_dict.ConfigDict()
@@ -38,7 +40,7 @@ def get_config():
     cfg.output_size = len(cfg.data.labels)
     cfg.featurizer = config_dict.ConfigDict()
     cfg.featurizer.name = 'transformer'
-    cfg.featurizer.d_feat_in = 10
+    cfg.featurizer.d_feat_in = 11
     cfg.featurizer.d_time_in = 1
     cfg.featurizer.d_feat = 64
     cfg.featurizer.d_time = 64
