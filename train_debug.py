@@ -118,7 +118,7 @@ def train(
     train_logger = pl_loggers.TensorBoardLogger(workdir, version='')
     trainer = pl.Trainer(
         default_root_dir=workdir,
-        max_epochs=config.num_epochs,
+        max_steps=config.num_steps,
         accelerator=config.accelerator,
         callbacks=callbacks,
         logger=train_logger,
