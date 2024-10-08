@@ -9,6 +9,7 @@ import numpy as np
 import pytorch_lightning as pl
 import pytorch_lightning.loggers as pl_loggers
 import torch
+import yaml
 from torch.utils.data import DataLoader, TensorDataset
 from absl import flags, logging
 from ml_collections import config_flags
@@ -44,6 +45,13 @@ def train(
             raise ValueError(
                 f"Workdir {workdir} already exists. Please set overwrite=True "
                 "to overwrite the existing directory.")
+
+    # convert config to yaml and save
+    os.makedirs(workdir, exist_ok=True)
+    config_dict = config.to_dict()
+    config_path = os.path.join(workdir, 'config.yaml')
+    with open(config_path, 'w') as f:
+        yaml.dump(config_dict, f, default_flow_style=False)
 
     # read in the dataset and prepare the data loader for training
     data_processed_dir = os.path.join(
@@ -90,6 +98,7 @@ def train(
             output_size=config.output_size,
             featurizer_args=config.featurizer,
             flows_args=config.flows,
+            mlp_args=config.mlp,
             optimizer_args=config.optimizer,
             scheduler_args=config.scheduler,
             norm_dict=norm_dict,
@@ -99,6 +108,7 @@ def train(
             output_size=config.output_size,
             featurizer_args=config.featurizer,
             flows_args=config.flows,
+            mlp_args=config.mlp,
             optimizer_args=config.optimizer,
             scheduler_args=config.scheduler,
             norm_dict=norm_dict,

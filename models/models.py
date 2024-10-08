@@ -124,7 +124,6 @@ class MLP(nn.Module):
         """
         super().__init__()
         self.input_size = input_size
-        self.output_size = output_size
         self.hidden_sizes = hidden_sizes
         self.activation_fn = activation_fn
 
