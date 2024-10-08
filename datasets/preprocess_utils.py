@@ -157,8 +157,11 @@ def bin_stream_spline(
     coord = np.c_[phi1, phi2]
     arc_projected = project_onto_univariate_spline(coord, spline, phi1_bins)
 
-    # bin the stream over the stream track and compute the bin statistics'
+    # normalized arc_porjected
     arc_min, arc_max = arc_projected.min(), arc_projected.max()
+    arc_projected  = (arc_projected - arc_min) / (arc_max - arc_min)
+
+    # bin the stream over the stream track and compute the bin statistics'
     arc_bins = np.linspace(arc_min, arc_max, num_bins+1)
     arc_bin_centers = 0.5 * (arc_bins[1:] + arc_bins[:-1])
     feat_mean = np.zeros((num_bins, feat.shape[1]))
