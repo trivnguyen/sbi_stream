@@ -34,8 +34,7 @@ def calculate_derived_properties(table):
 def read_process_dataset(
     data_dir: Union[str, Path], features: List[str] = None, labels: List[str] = None,
     binning_fn: str = None, binning_args: dict = None, num_datasets: int = 1, num_subsamples: int = 1,
-    subsample_factor: int = 1, bounds: dict = None,
-    frac: bool = False
+    subsample_factor: int = 1, bounds: dict = None, frac: bool = False, start_dataset: int = 0,
 ):
     """ Read the dataset and preprocess
 
@@ -61,6 +60,8 @@ def read_process_dataset(
         If True, read datasets with two additional features:
         number and fraction of stars in each bin.
         Default is False.
+    start_dataset: int
+        Index to start reading the dataset
     """
     # default args
     labels = labels or DEFAULT_LABELS
@@ -69,7 +70,7 @@ def read_process_dataset(
 
     x, y, t = [], [], []
 
-    for i in range(num_datasets):
+    for i in range(start_dataset, start_dataset + num_dataset):
         label_fn = os.path.join(data_dir, f'labels.{i}.csv')
         data_fn = os.path.join(data_dir, f'data.{i}.hdf5')
 
