@@ -27,7 +27,7 @@ def infer(config: ml_collections.ConfigDict, workdir: str = "./logging/"):
     # read in the processed dataset and prepare the data loader for training
     data_dir = os.path.join(config.data.root, config.data.name)
     logging.info("Processing raw data from %s", data_dir)
-    
+
     data = datasets.read_process_dataset(
         data_dir,
         features=config.data.features,
