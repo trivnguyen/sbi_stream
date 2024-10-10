@@ -28,9 +28,6 @@ def train(
     workdir = 'debug'
     logging.info("Starting training run {} at {}".format(name, workdir))
 
-    # set up random seed
-    pl.seed_everything(config.seed)
-
     workdir = os.path.join(workdir, name)
     checkpoint_path = None
     if os.path.exists(workdir):
@@ -46,7 +43,7 @@ def train(
     # read in the dataset and prepare the data loader for training
     data_processed_dir = os.path.join(
         config.data.root_processed, config.data.name, 'processed')
-    data_processed_path = os.path.join(data_processed_dir, f"{name}.pkl")
+    data_processed_path = os.path.join(data_processed_dir, f"debug.pkl")
     os.makedirs(os.path.dirname(data_processed_path), exist_ok=True)
 
     data_raw_dir = os.path.join(config.data.root, config.data.name)
@@ -79,7 +76,7 @@ def train(
         train_batch_size=config.train_batch_size,
         eval_batch_size=config.eval_batch_size,
         num_workers=config.num_workers,
-        seed=config.seed,  # reset seed for splitting train/val
+        seed=config.seed_data,  # reset seed for splitting train/val
     )
 
     # create model
@@ -127,6 +124,7 @@ def train(
 
     # train the model
     logging.info("Training model...")
+    pl.seed_everything(config.seed_training)
     trainer.fit(
         model, train_loader, val_loader,
         ckpt_path=checkpoint_path
