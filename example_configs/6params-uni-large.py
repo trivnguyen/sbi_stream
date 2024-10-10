@@ -4,18 +4,20 @@ from ml_collections import config_dict
 def get_config():
     cfg = config_dict.ConfigDict()
 
-    cfg.seed = 20
+    cfg.seed_data = 10
+    cfg.seed_training = 20
 
     # data configuration
     cfg.data = config_dict.ConfigDict()
-    cfg.data.root = '/pscratch/sd/t/tvnguyen/stream_sbi/datasets/'
-    cfg.data.root_processed = '/pscratch/sd/t/tvnguyen/stream_sbi/datasets/'
-    cfg.data.name = '6params-n1000-uni'
+    cfg.data.root = '/pscratch/sd/t/tvnguyen/stream_sbi_shared/datasets'
+    cfg.data.root_processed = '/pscratch/sd/t/tvnguyen/stream_sbi_shared/datasets'
+    cfg.data.name = '6params-uni'
+    cfg.data.name_processed = '6params-spline-sf20'
     cfg.data.num_datasets = 90
     cfg.data.labels = ['log_M_sat', 'log_rs_sat', 'vz', 'vphi', 'r', 'phi']
     cfg.data.features = ['phi1', 'phi2', 'pm1', 'pm2', 'vr', 'dist']
     cfg.data.subsample_factor = 20
-    cfg.data.num_subsamples = 20
+    cfg.data.num_subsamples = 1
     cfg.data.frac = True
     cfg.data.binning_fn = 'bin_stream_spline'
     cfg.data.binning_args = binning = config_dict.ConfigDict()
@@ -25,8 +27,8 @@ def get_config():
     binning.phi1_max = 12
 
     # logging configuration
-    cfg.workdir = # change this to your scratch directory
-    cfg.name = # name this
+    cfg.workdir = '/pscratch/sd/t/tvnguyen/stream_sbi_shared/trained-models'
+    cfg.name = '6params-spline'
     cfg.enable_progress_bar = False
     cfg.overwrite = False
     cfg.checkpoint = None
