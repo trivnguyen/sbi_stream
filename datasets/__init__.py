@@ -70,7 +70,7 @@ def read_process_dataset(
 
     x, y, t = [], [], []
 
-    for i in range(start_dataset, start_dataset + num_dataset):
+    for i in range(start_dataset, start_dataset + num_datasets):
         label_fn = os.path.join(data_dir, f'labels.{i}.csv')
         data_fn = os.path.join(data_dir, f'data.{i}.hdf5')
 
