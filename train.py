@@ -75,7 +75,8 @@ def train(
             num_subsamples=config.data.get("num_subsamples", 1),
             subsample_factor=config.data.get("subsample_factor", 1),
             bounds=config.data.get("label_bounds", None),
-            frac=config.data.get('frac', False)
+            frac=config.data.get('frac', False),
+            use_width=config.data.get('use_width', True)
         )
         logging.info("Saving processed data to %s", data_processed_path)
         with open(data_processed_path, "wb") as f:

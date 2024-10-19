@@ -47,28 +47,22 @@ def train(
     os.makedirs(os.path.dirname(data_processed_path), exist_ok=True)
 
     data_raw_dir = os.path.join(config.data.root, config.data.name)
-
-    if os.path.exists(data_processed_path):
-        logging.info("Loading processed data from %s", data_processed_path)
-        with open(data_processed_path, "rb") as f:
-            data = pickle.load(f)
-    else:
-        logging.info("Processing raw data from %s", data_raw_dir)
-        data = datasets.read_process_dataset(
-            data_raw_dir,
-            features=config.data.features,
-            labels=config.data.labels,
-            binning_fn=config.data.binning_fn,
-            binning_args=config.data.binning_args,
-            num_datasets=1,
-            num_subsamples=config.data.get("num_subsamples", 1),
-            subsample_factor=config.data.get("subsample_factor", 1),
-            bounds=config.data.get("label_bounds", None),
-            frac=config.data.get('frac', False)
-        )
-        logging.info("Saving processed data to %s", data_processed_path)
-        with open(data_processed_path, "wb") as f:
-            pickle.dump(data, f)
+    data = datasets.read_process_dataset(
+        data_raw_dir,
+        features=config.data.features,
+        labels=config.data.labels,
+        binning_fn=config.data.binning_fn,
+        binning_args=config.data.binning_args,
+        num_datasets=1,
+        num_subsamples=config.data.get("num_subsamples", 1),
+        subsample_factor=config.data.get("subsample_factor", 1),
+        bounds=config.data.get("label_bounds", None),
+        frac=config.data.get('frac', False),
+        use_width=config.data.get('use_width', True)
+    )
+    logging.info("Saving processed data to %s", data_processed_path)
+    with open(data_processed_path, "wb") as f:
+        pickle.dump(data, f)
 
     train_loader, val_loader, norm_dict = datasets.prepare_dataloader(
         data,
