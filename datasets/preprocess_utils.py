@@ -80,6 +80,34 @@ def project_onto_univariate_spline(data, spline, x_edges):
 
     return arc_projected
 
+def pad_and_create_mask(features, max_len=None):
+    """ Pad and create Transformer mask. """
+    if max_len is None:
+        max_len = max([f.shape[0] for f in features])
+
+    # create mask (batch_size, max_len)
+    # NOTE: that jax mask is 1 for valid entries and 0 for padded entries
+    # this is the opposite of the pytorch mask
+    # here we are using the PyTorch mask
+    mask = np.zeros((len(features), max_len), dtype=bool)
+    for i, f in enumerate(features):
+        mask[i, f.shape[0]:] = True
+
+    # zero pad features
+    padded_features = np.zeros((len(features), max_len, features[0].shape[1]))
+    for i, f in enumerate(features):
+        padded_features[i, :f.shape[0]] = f
+    return padded_features, mask
+
+def subsample_arrays(arrays: list, subsample_factor: int, unpack=False):
+    """ Subsample all arrays in the list. Assuming the arrays have the same length """
+    num_sample = len(arrays[0])
+    num_subsample = int(np.ceil(num_sample / subsample_factor))
+    idx = np.random.choice(num_sample, num_subsample, replace=False)
+    arrays = [arr[idx] for arr in arrays]
+    # if unpack:
+        # return (*arrays,)
+    return arrays
 
 def bin_stream(
     phi1: np.ndarray, feat: np.ndarray, num_bins: int,
@@ -185,32 +213,34 @@ def bin_stream_spline(
 
     return arc_bin_centers, feat_mean, feat_stdv, feat_count
 
+def bin_stream_hilmi24(
+    phi1: np.ndarray, phi2: np.ndarray, feat: np.ndarray,
+    m_coeff: float, b_coeff: float, num_bins: int,
+    phi1_min: float = None, phi1_max: float = None,
+    slope_coeff: float = None, bias_coeff: float = None,
+):
+    """ Bin the stream along the phi1 coordinates and compute the mean and stdv
+    of the features in each bin. """
 
-def pad_and_create_mask(features, max_len=None):
-    """ Pad and create Transformer mask. """
-    if max_len is None:
-        max_len = max([f.shape[0] for f in features])
+    # divide phi1 and phi2 using the line
+    phi2_line = m_coeff * phi1 + b_coeff
+    above = phi2 > phi2_line
+    below = phi2 <= phi2_line
 
-    # create mask (batch_size, max_len)
-    # NOTE: that jax mask is 1 for valid entries and 0 for padded entries
-    # this is the opposite of the pytorch mask
-    # here we are using the PyTorch mask
-    mask = np.zeros((len(features), max_len), dtype=bool)
-    for i, f in enumerate(features):
-        mask[i, f.shape[0]:] = True
+    phi1_min = phi1_min or phi1.min()
+    phi1_max = phi1_max or phi1.max()
 
-    # zero pad features
-    padded_features = np.zeros((len(features), max_len, features[0].shape[1]))
-    for i, f in enumerate(features):
-        padded_features[i, :f.shape[0]] = f
-    return padded_features, mask
+    phi1_bcent_ab, feat_mean_ab, feat_stdv_ab, feat_count_ab = bin_stream(
+        phi1[above], feat[above], num_bins=num_bins,
+        phi1_min=phi1_min, phi1_max=phi1_max
+    )
+    phi1_bcent_bl, feat_mean_bl, feat_stdv_bl, feat_count_bl = bin_stream(
+        phi1[below], feat[below], num_bins=num_bins,
+        phi1_min=phi1_min, phi1_max=phi1_max
+    )
+    phi1_bcent = np.concatenate([phi1_bcent_ab, phi1_bcent_bl])
+    feat_mean = np.concatenate([feat_mean_ab, feat_mean_bl])
+    feat_stdv = np.concatenate([feat_stdv_ab, feat_stdv_bl])
+    feat_count = np.concatenate([feat_count_ab, feat_count_bl])
 
-def subsample_arrays(arrays: list, subsample_factor: int, unpack=False):
-    """ Subsample all arrays in the list. Assuming the arrays have the same length """
-    num_sample = len(arrays[0])
-    num_subsample = int(np.ceil(num_sample / subsample_factor))
-    idx = np.random.choice(num_sample, num_subsample, replace=False)
-    arrays = [arr[idx] for arr in arrays]
-    # if unpack:
-        # return (*arrays,)
-    return arrays
+    return phi1_bcent, feat_mean, feat_stdv, feat_count

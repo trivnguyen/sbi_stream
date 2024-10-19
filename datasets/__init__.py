@@ -34,7 +34,8 @@ def calculate_derived_properties(table):
 def read_process_dataset(
     data_dir: Union[str, Path], features: List[str] = None, labels: List[str] = None,
     binning_fn: str = None, binning_args: dict = None, num_datasets: int = 1, num_subsamples: int = 1,
-    subsample_factor: int = 1, bounds: dict = None, frac: bool = False, start_dataset: int = 0,
+    subsample_factor: int = 1, bounds: dict = None, frac: bool = False, use_width: bool = True,
+    start_dataset: int = 0,
 ):
     """ Read the dataset and preprocess
 
@@ -60,6 +61,8 @@ def read_process_dataset(
         If True, read datasets with two additional features:
         number and fraction of stars in each bin.
         Default is False.
+    use_width: bool, optional
+        If True, use the width of the stream in each bin
     start_dataset: int
         Index to start reading the dataset
     """
@@ -120,14 +123,21 @@ def read_process_dataset(
                     elif binning_fn == 'bin_stream_spline':
                         bin_centers, feat_mean, feat_stdv, feat_count = preprocess_utils.bin_stream_spline(
                             phi1_subsample, phi2_subsample, feat_subsample, **binning_args)
+                    elif binning_fn == 'bin_stream_hilmi24':
+                        bin_centers, feat_mean, feat_stdv, feat_count = preprocess_utils.bin_stream_hilmi24(
+                            phi1_subsample, phi2_subsample, feat_subsample, **binning_args)
                     if len(bin_centers) == 0:
                         continue
 
+                    all_feats = []
+                    all_feats.append(feat_mean)
+                    if use_width:
+                        all_feats.append(feat_stdv)
                     if frac:
                         feat_frac = feat_count / np.sum(feat_count)
-                        x.append(np.concatenate([feat_mean, feat_stdv, feat_frac], axis=1))
-                    else:
-                        x.append(np.concatenate([feat_mean, feat_stdv], axis=1))
+                        all_feats.append(feat_frac)
+                    all_feats = np.concatenate(all_feats, axis=1)
+                    x.append(all_feats)
                     y.append(label)
                     t.append(bin_centers.reshape(-1, 1))
                 else:
