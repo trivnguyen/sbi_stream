@@ -18,9 +18,7 @@ import datasets
 
 logging.set_verbosity(logging.INFO)
 
-def train(
-    config: ml_collections.ConfigDict, workdir: str = "./logging/"
-):
+def preprocess(config: ml_collections.ConfigDict):
     # read in the dataset and prepare the data loader for training
     data_processed_dir = os.path.join(
         config.data.root_processed, config.data.name, 'processed')
@@ -30,26 +28,23 @@ def train(
 
     data_raw_dir = os.path.join(config.data.root, config.data.name)
 
-    if os.path.exists(data_processed_path):
-        logging.info("Loading processed data from %s", data_processed_path)
-        with open(data_processed_path, "rb") as f:
-            data = pickle.load(f)
-    else:
-        logging.info("Processing raw data from %s", data_raw_dir)
-        data = datasets.read_process_dataset(
-            data_raw_dir,
-            features=config.data.features,
-            labels=config.data.labels,
-            binning_fn=config.data.binning_fn,
-            binning_args=config.data.binning_args,
-            num_datasets=config.data.get("num_datasets", 1),
-            num_subsamples=config.data.get("num_subsamples", 1),
-            subsample_factor=config.data.get("subsample_factor", 1),
-            bounds=config.data.get("label_bounds", None),
-            frac=config.data.get('frac', False)
-        )
-        logging.info("Saving processed data to %s", data_processed_path)
-        with open(data_processed_path, "wb") as f:
+    logging.info("Processing raw data from %s", data_raw_dir)
+    data = datasets.read_process_dataset(
+        data_raw_dir,
+        features=config.data.features,
+        labels=config.data.labels,
+        binning_fn=config.data.binning_fn,
+        binning_args=config.data.binning_args,
+        num_datasets=config.data.get("num_datasets", 1),
+        start_dataset=config.data.get('start_dataset', 0),
+        num_subsamples=config.data.get("num_subsamples", 1),
+        subsample_factor=config.data.get("subsample_factor", 1),
+        bounds=config.data.get("label_bounds", None),
+        frac=config.data.get('frac', False),
+        use_width=config.data.get('use_width', True)
+    )
+    logging.info("Saving processed data to %s", data_processed_path)
+    with open(data_processed_path, "wb") as f:
             pickle.dump(data, f)
 
 if __name__ == "__main__":
@@ -64,4 +59,4 @@ if __name__ == "__main__":
     FLAGS(sys.argv)
 
     # Start training run
-    train(config=FLAGS.config, workdir=FLAGS.config.workdir)
+    preprocess(config=FLAGS.config)

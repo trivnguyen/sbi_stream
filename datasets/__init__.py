@@ -115,7 +115,7 @@ def read_process_dataset(
                 phi1_subsample, phi2_subsample, feat_subsample = preprocess_utils.subsample_arrays(
                     [phi1, phi2, feat], subsample_factor=subsample_factor)
 
-                if binning_fn is not None:
+                if binning_fn is not 'particle':
                     # bin the stream
                     if binning_fn == 'bin_stream':
                         bin_centers, feat_mean, feat_stdv, feat_count = preprocess_utils.bin_stream(
@@ -141,8 +141,12 @@ def read_process_dataset(
                     y.append(label)
                     t.append(bin_centers.reshape(-1, 1))
                 else:
-                    # TODO: figure out how to deal with t in the particle case
                     # no binning, particle-level data
+                    # TODO: figure out how to deal with t in the particle case
+                    mask = (binning_args.phi1_min < phi1_subsample) & (phi1_subsample < binning_args.phi1_max)
+                    phi1_subsample = phi1_subsample[mask]
+                    phi2_subsample = phi2_subsample[mask]
+                    feat_subsample = feat_subsample[mask]
                     x.append(feat_subsample)
                     y.append(label)
                     t.append(phi1_subsample.reshape(-1, 1))
