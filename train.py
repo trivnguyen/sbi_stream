@@ -132,6 +132,7 @@ def train(
         callbacks=callbacks,
         logger=train_logger,
         enable_progress_bar=config.get("enable_progress_bar", True),
+        devices=1
     )
 
     # train the model
