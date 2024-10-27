@@ -1,0 +1,164 @@
+d_time: 1
+d_time_projection: 16
+featurizer_args: !!python/object:ml_collections.config_dict.config_dict.ConfigDict
+  _convert_dict: true
+  _fields:
+    activation: !!python/object:ml_collections.config_dict.config_dict.ConfigDict
+      _convert_dict: true
+      _fields:
+        name: Identity
+      _locked: true
+      _type_safe: true
+    batch_first: true
+    d_feat: 128
+    d_feat_in: 13
+    d_time: 128
+    d_time_in: 1
+    dim_feedforward: 256
+    name: transformer
+    nhead: 4
+    num_encoder_layers: 4
+  _locked: true
+  _type_safe: true
+flows_args: !!python/object:ml_collections.config_dict.config_dict.ConfigDict
+  _convert_dict: true
+  _fields:
+    activation: !!python/object:ml_collections.config_dict.config_dict.ConfigDict
+      _convert_dict: true
+      _fields:
+        name: gelu
+      _locked: true
+      _type_safe: true
+    hidden_sizes:
+    - 256
+    - 256
+    - 256
+    - 256
+    num_bins: 8
+    num_transforms: 4
+    zuko: true
+  _locked: true
+  _type_safe: true
+mlp_args: !!python/object:ml_collections.config_dict.config_dict.ConfigDict
+  _convert_dict: true
+  _fields:
+    activation: !!python/object:ml_collections.config_dict.config_dict.ConfigDict
+      _convert_dict: true
+      _fields:
+        name: gelu
+      _locked: true
+      _type_safe: true
+    batch_norm: true
+    dropout: 0.1
+    hidden_sizes:
+    - 256
+    - 256
+  _locked: true
+  _type_safe: true
+norm_dict:
+  t_loc: !!python/object/apply:numpy.core.multiarray.scalar
+  - &id001 !!python/object/apply:numpy.dtype
+    args:
+    - f8
+    - false
+    - true
+    state: !!python/tuple
+    - 3
+    - <
+    - null
+    - null
+    - null
+    - -1
+    - -1
+    - 0
+  - !!binary |
+    AAAAAAAAAAA=
+  t_scale: !!python/object/apply:numpy.core.multiarray.scalar
+  - *id001
+  - !!binary |
+    rkfhehSu7z8=
+  x_loc: !!python/object/apply:numpy.core.multiarray._reconstruct
+    args:
+    - &id002 !!python/name:numpy.ndarray ''
+    - !!python/tuple
+      - 0
+    - !!binary |
+      Yg==
+    state: !!python/tuple
+    - 1
+    - !!python/tuple
+      - 13
+    - *id001
+    - false
+    - !!binary |
+      kJHmmu2ODcBkaCaJiXTgP4LTPGooQti/g4bjAFgg6L8ZP8P/PZZVwHT6TZ+ApzZAemUfAWr1xD+U
+      X0m4y6PBP+twL+9c+nQ/nyAiQYU8fD///aYMh6LxP5mtOIVHk8A/cFNp1dfqlD8=
+  x_scale: !!python/object/apply:numpy.core.multiarray._reconstruct
+    args:
+    - *id002
+    - !!python/tuple
+      - 0
+    - !!binary |
+      Yg==
+    state: !!python/tuple
+    - 1
+    - !!python/tuple
+      - 13
+    - *id001
+    - false
+    - !!binary |
+      175I2h5hIUAA5RBE18ztPyImpWRuTcE/2Le13ZPTyz8oFuiuz1JFQCsqrBl50BNAB2VnjkUPuD/R
+      eIWCwoPEP8mB+RAjOHc/jo3/K9Vwgz9fXQxp4FjzPz2QXhOzocU/sDP9YMX5jz8=
+  y_loc: !!python/object/apply:numpy.core.multiarray._reconstruct
+    args:
+    - *id002
+    - !!python/tuple
+      - 0
+    - !!binary |
+      Yg==
+    state: !!python/tuple
+    - 1
+    - !!python/tuple
+      - 6
+    - *id001
+    - false
+    - !!binary |
+      9eCxIMomCMAQukASzVblv7aWbNH2VEFAABCAt106FMAGLYv6f07hP6IE7A+k32dA
+  y_scale: !!python/object/apply:numpy.core.multiarray._reconstruct
+    args:
+    - *id002
+    - !!python/tuple
+      - 0
+    - !!binary |
+      Yg==
+    state: !!python/tuple
+    - 1
+    - !!python/tuple
+      - 6
+    - *id001
+    - false
+    - !!binary |
+      83fmcKRA4T/YgwBw0qvLP/08TOhsDDxABsePnfRzO0DRITHff3jSPzS1UF+ooFlA
+optimizer_args: !!python/object:ml_collections.config_dict.config_dict.ConfigDict
+  _convert_dict: true
+  _fields:
+    betas: !!python/tuple
+    - 0.9
+    - 0.98
+    eps: 1.0e-09
+    lr: 0.0005
+    name: AdamW
+    weight_decay: 0.0001
+  _locked: true
+  _type_safe: true
+output_size: 6
+scheduler_args: !!python/object:ml_collections.config_dict.config_dict.ConfigDict
+  _convert_dict: true
+  _fields:
+    decay_steps: 500000
+    eta_min: 0.01
+    interval: step
+    name: WarmUpCosineAnnealingLR
+    warmup_steps: 50000
+  _locked: true
+  _type_safe: true

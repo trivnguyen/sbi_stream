@@ -86,9 +86,61 @@ class TransformerFeaturizer(nn.Module):
                 # this happens because with both self.eval() and torch.no_grad()
                 # the transformer encoder changes the length of the output to
                 # match the max non-padded length in the batch
-                max_seq_len = torch.max(padding_mask.eq(0).sum(-1))
+                max_seq_len = output.shape[1]
                 padding_mask = padding_mask[:, :max_seq_len]
             output = output.masked_fill(padding_mask.unsqueeze(-1), 0)
             output = output.sum(dim=1)
 
         return output
+
+class MLP(nn.Module):
+    """
+    MLP with a variable number of hidden layers.
+
+    Attributes
+    ----------
+    layers : nn.ModuleList
+        The layers of the MLP.
+    activation_fn : callable
+        The activation function to use.
+    """
+    def __init__(self, input_size, hidden_sizes=[512],
+                 activation_fn=nn.ReLU(), batch_norm=False, dropout=0.0):
+        """
+        Parameters
+        ----------
+        input_size : int
+            The size of the input
+        output_size : int
+            The number of classes
+        hidden_sizes : list of int, optional
+            The sizes of the hidden layers. Default: [512]
+        activation_fn : callable, optional
+            The activation function to use. Default: nn.ReLU()
+        batch_norm: bool, optional
+            Whether to use batch normalization. Default: False
+        dropout: float, optional
+            The dropout rate. Default: 0.0
+        """
+        super().__init__()
+        self.input_size = input_size
+        self.hidden_sizes = hidden_sizes
+        self.activation_fn = activation_fn
+
+        # Create a list of all layer sizes: input, hidden, and output
+        layer_sizes = [input_size] + hidden_sizes
+
+        # Create layers dynamically
+        self.layers = nn.ModuleList()
+        for i in range(len(layer_sizes) - 1):
+            in_dim = layer_sizes[i]
+            out_dim = layer_sizes[i + 1]
+            self.layers.append(nn.Linear(in_dim, out_dim))
+            self.layers.append(activation_fn)
+            if batch_norm:
+                self.layers.append(nn.BatchNorm1d(out_dim))
+            self.layers.append(nn.Dropout(dropout))
+        self.layers = nn.Sequential(*self.layers)
+
+    def forward(self, x):
+        return self.layers(x)

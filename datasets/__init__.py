@@ -13,6 +13,10 @@ from tqdm import tqdm
 
 from . import io_utils, preprocess_utils
 
+DEFAULT_LABELS = ['log_M_sat', 'vz']
+DEFAULT_FEATURES = ['phi2', 'pm1', 'pm2', 'vr', 'dist']
+
+
 def calculate_derived_properties(table):
     ''' Calculate derived properties that are not stored in the dataset '''
     table['log_M_sat'] = np.log10(table['M_sat'])
@@ -28,11 +32,10 @@ def calculate_derived_properties(table):
 
 
 def read_process_dataset(
-    data_dir: Union[str, Path], labels: List[str], num_bins: int = 0,
-    phi1_min: float = None, phi1_max: float = None,
-    num_datasets: int = 1, num_subsamples: int = 1,
-    subsample_factor: int = 1, bounds: dict = None, 
-    frac = False, num_knots = 0
+    data_dir: Union[str, Path], features: List[str] = None, labels: List[str] = None,
+    binning_fn: str = None, binning_args: dict = None, num_datasets: int = 1, num_subsamples: int = 1,
+    subsample_factor: int = 1, bounds: dict = None, frac: bool = False, use_width: bool = True,
+    start_dataset: int = 0,
 ):
     """ Read the dataset and preprocess
 
@@ -42,12 +45,10 @@ def read_process_dataset(
         Path to the directory containing the stream data.
     labels : list of str
         List of labels to use for the regression.
-    num_bins : int
-        Number of bins to use for binning the stream.
-    phi1_min : float, optional
-        Minimum value of phi1 to use. Default is None.
-    phi1_max : float, optional
-        Maximum value of phi1 to use. Default is None.
+    binning_fn: str
+        The binning function
+    binning_args: dict
+        Args of the binning function
     num_datasets : int, optional
         Number of datasets to read in. Default is 1.
     num_subsamples : int, optional
@@ -58,15 +59,21 @@ def read_process_dataset(
         Dictionary containing the bounds for each label. Default is None.
     frac: bool, optional
         If True, read datasets with two additional features:
-        number and fraction of stars in each bin. 
+        number and fraction of stars in each bin.
         Default is False.
-    num_knots: int, optional
-        Number of internal knots for spline fit
-        Default is 0.
+    use_width: bool, optional
+        If True, use the width of the stream in each bin
+    start_dataset: int
+        Index to start reading the dataset
     """
+    # default args
+    labels = labels or DEFAULT_LABELS
+    features = features or DEFAULT_FEATURES
+    binning_args = binning_args or {}
+
     x, y, t = [], [], []
 
-    for i in range(num_datasets):
+    for i in range(start_dataset, start_dataset + num_datasets):
         label_fn = os.path.join(data_dir, f'labels.{i}.csv')
         data_fn = os.path.join(data_dir, f'data.{i}.hdf5')
 
@@ -89,11 +96,7 @@ def read_process_dataset(
             loop.set_description(f'Processing pid {pid}')
             phi1 = data['phi1'][pid]
             phi2 = data['phi2'][pid]
-            pm1 = data['pm1'][pid]
-            pm2 = data['pm2'][pid]
-            vr = data['vr'][pid]
-            dist = data['dist'][pid]
-            feat = np.stack([phi2, pm1, pm2, vr, dist], axis=1)
+            feat = np.stack([data[f][pid] for f in features], axis=1)
 
             # ignore out of bounds labels
             if bounds is not None:
@@ -109,49 +112,41 @@ def read_process_dataset(
             # TODO: figure out how to deal with t in the particle case
             for _ in range(num_subsamples):
                 # subsample the stream
-                phi1_subsample, feat_subsample = preprocess_utils.subsample_stream(
-                    phi1, feat, subsample_factor=subsample_factor)
+                phi1_subsample, phi2_subsample, feat_subsample = preprocess_utils.subsample_arrays(
+                    [phi1, phi2, feat], subsample_factor=subsample_factor)
 
-                if num_bins > 0:
+                if binning_fn is not 'particle':
                     # bin the stream
-                    phi1_bin_centers, feat_mean, feat_stdv, feat_count = preprocess_utils.bin_stream(
-                        phi1_subsample, feat_subsample, num_bins=num_bins,
-                        phi1_min=phi1_min, phi1_max=phi1_max)
-
-                    if len(phi1_bin_centers) == 0:
+                    if binning_fn == 'bin_stream':
+                        bin_centers, feat_mean, feat_stdv, feat_count = preprocess_utils.bin_stream(
+                            phi1_subsample, feat_subsample, **binning_args)
+                    elif binning_fn == 'bin_stream_spline':
+                        bin_centers, feat_mean, feat_stdv, feat_count = preprocess_utils.bin_stream_spline(
+                            phi1_subsample, phi2_subsample, feat_subsample, **binning_args)
+                    elif binning_fn == 'bin_stream_hilmi24':
+                        bin_centers, feat_mean, feat_stdv, feat_count = preprocess_utils.bin_stream_hilmi24(
+                            phi1_subsample, phi2_subsample, feat_subsample, **binning_args)
+                    if len(bin_centers) == 0:
                         continue
 
-                    else:
-                        if frac: 
-                            feat_frac = feat_count / len(phi1)
-                            x.append(np.concatenate([feat_mean, feat_stdv, feat_frac], axis=1))
-                        
-                        else: 
-                            x.append(np.concatenate([feat_mean, feat_stdv], axis=1))
-
+                    all_feats = []
+                    all_feats.append(feat_mean)
+                    if use_width:
+                        all_feats.append(feat_stdv)
+                    if frac:
+                        feat_frac = feat_count / np.sum(feat_count)
+                        all_feats.append(feat_frac)
+                    all_feats = np.concatenate(all_feats, axis=1)
+                    x.append(all_feats)
                     y.append(label)
-                    t.append(phi1_bin_centers.reshape(-1, 1))
-                
-                if num_knots > 0:
-                    phi1_mask = (phi1_subsample >= phi1_min) & (phi1_subsample <= phi1_max)
-                    phi1_subsample = phi1_subsample[phi1_mask]
-                    sorted_indices = np.argsort(phi1_subsample)
-                    sorted_phi1 = phi1_subsample[sorted_indices]
-                    sorted_feat = feat_subsample[sorted_indices, :]
-                    
-                    phi1_bin_centers, feat_mean, feat_stdv, feat_count = preprocess_utils.bin_spline(
-                        sorted_phi1, sorted_feat, num_knots, 
-                        phi1_min=phi1_min, phi1_max=phi1_max)
-                    
-                    feat_frac = feat_count / len(phi1)
-                    x.append(np.concatenate([feat_mean, feat_stdv, feat_frac], axis=1))
-                    y.append(label)
-                    t.append(phi1_bin_centers.reshape(-1, 1))
-
+                    t.append(bin_centers.reshape(-1, 1))
                 else:
-                    # TODO: figure out how to deal with t in the particle case
                     # no binning, particle-level data
-
+                    # TODO: figure out how to deal with t in the particle case
+                    mask = (binning_args.phi1_min < phi1_subsample) & (phi1_subsample < binning_args.phi1_max)
+                    phi1_subsample = phi1_subsample[mask]
+                    phi2_subsample = phi2_subsample[mask]
+                    feat_subsample = feat_subsample[mask]
                     x.append(feat_subsample)
                     y.append(label)
                     t.append(phi1_subsample.reshape(-1, 1))
@@ -163,6 +158,7 @@ def read_process_dataset(
     y = np.stack(y, axis=0)
 
     return x, y, t, padding_mask
+
 
 def prepare_dataloader(
     data: Tuple,

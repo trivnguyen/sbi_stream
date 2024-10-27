@@ -12,6 +12,7 @@ class Regressor(pl.LightningModule):
         output_size,
         featurizer_args,
         flows_args,
+        mlp_args,
         optimizer_args=None,
         scheduler_args=None,
         d_time=1,
@@ -27,6 +28,8 @@ class Regressor(pl.LightningModule):
             Arguments for the featurizer
         flows_args : dict
             Arguments for the normalizing flow
+        mlp_args: dict
+            Argument for the MLP
         optimizer_args : dict, optional
             Arguments for the optimizer. Default: None
         scheduler_args : dict, optional
@@ -39,6 +42,7 @@ class Regressor(pl.LightningModule):
         self.output_size = output_size
         self.featurizer_args = featurizer_args
         self.flows_args = flows_args
+        self.mlp_args = mlp_args or {}
         self.optimizer_args = optimizer_args or {}
         self.scheduler_args = scheduler_args or {}
         self.norm_dict = norm_dict
@@ -68,15 +72,29 @@ class Regressor(pl.LightningModule):
             raise ValueError(
                 f'Featurizer {featurizer_name} not supported')
 
+        # create the MLP
+        if len(self.mlp_args) > 0:
+            activation_fn = models_utils.get_activation(self.mlp_args.activation)
+            self.mlp = models.MLP(
+                input_size=self.featurizer.d_model,
+                hidden_sizes=self.mlp_args.hidden_sizes,
+                activation_fn=activation_fn,
+                batch_norm=self.mlp_args.batch_norm,
+                dropout=self.mlp_args.dropout,
+            )
+            flows_context_features = self.mlp_args.hidden_sizes[-1]
+        else:
+            self.mlp = None
+            flows_context_features = self.featurizer.d_model
+
         # create the flows
         self.flows = flows_utils.build_maf(
             features=self.output_size,
             hidden_features=self.flows_args.hidden_size,
-            context_features=self.featurizer.d_model,
+            context_features=flows_context_features,
             num_layers=self.flows_args.num_layers,
             num_blocks=self.flows_args.num_blocks,
         )
-
 
     def _prepare_training_batch(self, batch):
         """ Prepare the batch for training. """
@@ -97,6 +115,8 @@ class Regressor(pl.LightningModule):
 
     def forward(self, x, t,  padding_mask=None):
         x = self.featurizer(x, t, padding_mask=padding_mask)
+        if self.mlp is not None:
+            x = self.mlp(x)
         return x
 
     def training_step(self, batch, batch_idx):

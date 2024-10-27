@@ -9,10 +9,12 @@ import torch
 import pytorch_lightning as pl
 from absl import flags, logging
 from ml_collections import config_flags
-from torch_geometric.utils import from_networkx
 from tqdm import tqdm
 
-from models import infer_utils
+import datasets
+from models.zuko import regressor as zuko_regressor
+from models.zuko import infer_utils
+from datasets import io_utils, preprocess_utils
 
 logging.set_verbosity(logging.INFO)
 
@@ -24,29 +26,44 @@ def infer(config: ml_collections.ConfigDict, workdir: str = "./logging/"):
 
     # read in the processed dataset and prepare the data loader for training
     data_dir = os.path.join(config.data.root, config.data.name)
-    data_processed_path = os.path.join(
-        data_dir, f"processed/{config.name}.pkl")
+    logging.info("Processing raw data from %s", data_dir)
 
-    logging.info("Loading processed data from %s", data_processed_path)
-
-    with open(data_processed_path, "rb") as f:
-        data = pickle.load(f)
+    data = datasets.read_process_dataset(
+        data_dir,
+        features=config.data.features,
+        labels=config.data.labels,
+        binning_fn=config.data.binning_fn,
+        binning_args=config.data.binning_args,
+        num_datasets=config.data.get("num_datasets", 1),
+        num_subsamples=config.data.get("num_subsamples", 1),
+        subsample_factor=config.data.get("subsample_factor", 1),
+        bounds=config.data.get("label_bounds", None),
+        frac=config.data.get('frac', False)
+    )
     _, data_loader, norm_dict = datasets.prepare_dataloader(
-        data, train_frac=0.8, train_batch_size=1024, eval_batch_size=1024,
-        num_workers=4, seed=config.seed)
+        data,
+        train_frac=config.train_frac,
+        train_batch_size=config.train_batch_size,
+        eval_batch_size=config.eval_batch_size,
+        num_workers=config.num_workers,
+        seed=config.seed
+    )
 
     # load model
-    model = regressor.Regressor.load_from_checkpoint(
-        config.checkpoint_path, map_location=device)
+    checkpoint_path = os.path.join(
+        config.workdir, config.name, 'lightning_logs/checkpoints', config.checkpoint
+    )
+    model = zuko_regressor.Regressor.load_from_checkpoint(
+        checkpoint_path, map_location=device)
 
-    # start sampling
     samples, labels = infer_utils.sample(
-        model, data_loader, config.infer.num_samples,
-        return_labels=True, norm_dict=norm_dict)
+        model, data_loader, config.infer.num_samples, return_labels=True, norm_dict=norm_dict)
 
     # save samples and labels
-    samples_path = os.path.join(
-        config.workdir, config.name)
+    samples_path = os.path.join(config.workdir, config.name, '6params-uni-zuko.pkl')
+    with open(samples_path, 'wb') as f:
+        data = {'samples': samples, 'labels': labels}
+        pickle.dump(data, f, protocol=pickle.HIGHEST_PROTOCOL)
 
 
 if __name__ == "__main__":
