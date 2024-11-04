@@ -217,7 +217,6 @@ def bin_stream_hilmi24(
     phi1: np.ndarray, phi2: np.ndarray, feat: np.ndarray,
     m_coeff: float, b_coeff: float, num_bins: int,
     phi1_min: float = None, phi1_max: float = None,
-    slope_coeff: float = None, bias_coeff: float = None,
 ):
     """ Bin the stream along the phi1 coordinates and compute the mean and stdv
     of the features in each bin. """
