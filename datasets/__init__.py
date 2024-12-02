@@ -115,6 +115,14 @@ def read_process_dataset(
                 phi1_subsample, phi2_subsample, feat_subsample = preprocess_utils.subsample_arrays(
                     [phi1, phi2, feat], subsample_factor=subsample_factor)
 
+                if uncertainty:
+                    # add uncertainty to the features
+                    feat_subsample = preprocess_utils.add_uncertainty(feat_subsample, 
+                                                                      dist = True,
+                                                                      v_r = True,
+                                                                      pm_phi1 = True,
+                                                                      pm_phi2 = True)
+
                 if binning_fn is not 'particle':
                     # bin the stream
                     if binning_fn == 'bin_stream':

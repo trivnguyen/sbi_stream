@@ -243,3 +243,181 @@ def bin_stream_hilmi24(
     feat_count = np.concatenate([feat_count_ab, feat_count_bl])
 
     return phi1_bcent, feat_mean, feat_stdv, feat_count
+
+
+# Get simulated Gaia G band magnitudes
+def gaia_transform(g, r, i, z, version='dr3'):
+    """From Eli Rykoff for FGCM comparisons via Slack:
+    https://darkenergysurvey.slack.com/archives/C016J5SDV9T/p1608182260343200
+
+    This complex model behaves about as well as a random forest
+    classifier for Gaia DR2.  The magnitude dependence of the
+    transformation is huge because of background errors in Gaia DR2.
+
+    The EDR3 transformations have a much smaller r-offset curvature
+    due to background issues and should be able to go deeper.
+
+    These transformations are valid for 0 < g - i < 1.5
+
+    /nfs/slac/kipac/fs1/g/des/erykoff/des/y6a1/fgcm/run_v2.1.2/gedr3/gaia_superfitmodel3.py
+
+    Parameters
+    ----------
+    g, r, i, z : DECam magnitudes in g,r,i,z  (AB system)
+    version    : Version of the Gaia catalog to compare against
+
+    Returns
+    -------
+    Gmag  : Predicted Gaia G-band magnitude based on DECam griz
+    """
+
+    magConst = 2.5 / np.log(10.0)
+    lambdaStd = np.array([4790.28076172, 6403.26367188, 7802.49755859, 9158.77441406])
+    i0Std = np.array([0.16008162, 0.18297842, 0.17169334, 0.1337308])
+    i1Std = np.array([2.09808350e-05, -1.22070312e-04, -1.08942389e-04, -8.01086426e-05])
+    i10Std = i1Std / i0Std
+    fudgeFactors = np.array([0.25, 1.0, 1.0, 0.25])
+    fudgeShift   = 0.0 # Additive shift in peak (mag)
+    nBands = lambdaStd.size
+
+    #g -= -46 * 1e-3
+    #r -= 0   * 1e-3
+    #i -= 38  * 1e-3
+    #z -= 31  * 1e-3
+
+    trainCat = np.rec.fromarrays([g,r,i,z],names=['g','r','i','z'])
+    fluxg = 10**(g/-2.5)
+    fluxr = 10**(r/-2.5)
+    fluxi = 10**(i/-2.5)
+    fluxz = 10**(z/-2.5)
+
+    S = np.zeros((trainCat.size, nBands - 1), dtype='f8')
+
+    S[:, 0] = (-1. / magConst) * (trainCat['r'] - trainCat['g']) / (lambdaStd[1] - lambdaStd[0])
+    S[:, 1] = (-1. / magConst) * (trainCat['i'] - trainCat['r']) / (lambdaStd[2] - lambdaStd[1])
+    S[:, 2] = (-1. / magConst) * (trainCat['z'] - trainCat['i']) / (lambdaStd[3] - lambdaStd[2])
+
+    fnuPrime = np.zeros((trainCat.size, nBands))
+    fnuPrime[:, 0] = S[:, 0] + fudgeFactors[0] * (S[:, 1] + S[:, 0])
+    fnuPrime[:, 1] = fudgeFactors[1] * (S[:, 0] + S[:, 1]) / 2.0
+    fnuPrime[:, 2] = fudgeFactors[2] * (S[:, 1] + S[:, 2]) / 2.0
+    fnuPrime[:, 3] = S[:, 2] + fudgeFactors[3] * ((lambdaStd[3] - lambdaStd[2]) / (lambdaStd[3] - lambdaStd[1])) * (S[:, 2] - S[:, 1])
+
+    if version=='dr2':
+        # DR2 fit parameters
+        pars = [ 1.43223290e+00,  1.50877061e+00, 8.43173013e-01, -5.99023967e-04, 
+                 4.06188382e-01,  3.11181978e-01, 2.51002598e-01,  1.00000000e-05,  
+                 4.94284725e-03,  1.80499806e-03]
+
+    elif version=='edr3':
+        # EDR3: Notice that the last two parameters (describing the
+        # r-offset curvature due to background issues) are much smaller.
+        pars = [ 2.61815727e+00,  2.69372875e+00,  1.45644592e+00, -5.99023051e-04,
+                 3.97535324e-01,  3.15794343e-01,  2.55484718e-01,  1.00000000e-05,
+                 8.30152817e-04, -3.57980758e-04]
+
+        fudgeShift = 2.4e-3 # Additive shift in peak (mag)
+    else:
+        raise Exception("Unrecognized Gaia version: %s"%version)
+
+    i10g,i10r,i10i,i10z = pars[0:4]
+    kg,kr,ki,kz = pars[4:8]
+    r1,r2 = pars[8:10]
+    desFlux = (kg * fluxg * (1.0 + fnuPrime[:, 0] * i10g) +
+               kr * fluxr * (1.0 + fnuPrime[:, 1] * i10r) +
+               ki * fluxi * (1.0 + fnuPrime[:, 2] * i10i) +
+               kz * fluxz * (1.0 + fnuPrime[:, 3] * i10z))
+    mGDES = -2.5 * np.log10(desFlux)
+    rMag = -2.5 * np.log10(fluxr)
+    mGDES += r1 * (rMag - 17.0) + r2 * (rMag - 17.0)**2.
+    mGDES += fudgeShift # Peak shift
+    return mGDES
+
+def get_decam_g_r_i_z(iso_name = 'Dotter', iso_age = 11.5, iso_metallicity = 0.00016, iso_distance_modulus = 16.807, iso_stellar_mass = 2e4):
+    """Get simulated DECam g, r, i, z magnitudes from the AAU isochrone"""
+    
+    # Simulated AAU isochrone for g and r bands 
+    iso_g_r = isochrone.factory(name=iso_name,
+                            age=iso_age,  # Gyr
+                            metallicity=iso_metallicity,  # Approximate Z value for the stream metallicity
+                            distance_modulus=iso_distance_modulus,  # Average distance modulus from the stream properties
+                            )
+
+    # Simulated AAU isochrone for i and z bands
+    iso_i_z = isochrone.factory(name=iso_name,
+                            age=iso_age,  # Gyr
+                            metallicity=iso_metallicity,  # Approximate Z value for the stream metallicity
+                            distance_modulus=iso_distance_modulus,  # Average distance modulus from the stream properties
+                            band_1 = 'i',
+                            band_2 = 'z'
+                            )
+
+    decam_g, decam_r = iso_g_r.simulate(stellar_mass=iso_stellar_mass)
+    decam_i, decam_z = iso_i_z.simulate(stellar_mass=iso_stellar_mass)
+
+    return decam_g, decam_r, decam_i, decam_z
+
+def get_gaia_g(decam_g, decam_r, decam_i, decam_z):
+    """Get simulated Gaia G band magnitudes from the AAU isochrone"""
+
+    gaia_g = gaia_transform(decam_g, decam_r, decam_i, decam_z, version='edr3')
+
+    filtered_gaia_g = []
+    
+    color = decam_g - decam_r + 0.04
+    min_color = 0.2
+    max_color = max(color)
+
+    min_mag = 14.875
+    max_mag = 19.512
+
+    for c, m, j in zip(color, decam_r, gaia_g):
+            if min_color <= c <= max_color and min_mag <= m <= max_mag:
+                    filtered_gaia_g.append(j)
+    return filtered_gaia_g
+
+def get_pm_uncertainties(gaia_g):
+    """Get proper motion uncertainties for the simulated stars"""
+    
+    # Calculate proper motion uncertainties for Gaia DR3
+    pmra_unc, pmdec_unc = proper_motion_uncertainty(gaia_g, release='dr3')
+
+    pmra_err = pmra_unc/1000
+    pmdec_err = pmdec_unc/1000
+        
+    return pmra_err, pmdec_err
+
+def add_uncertainty(
+    feat: np.ndarray,
+    dist = True,
+    v_r = True,
+    pm_phi1 = True,
+    pm_phi2 = True):
+    """ Add uncertainties to the features: distances, radial velocities, proper motions in phi1,
+    and proper motions in phi2. """
+    
+    
+    if pm_phi1 or pm_phi2:
+        decam_g, decam_r, decam_i, decam_z = get_decam_g_r_i_z()
+        gaia_g = get_gaia_g(decam_g, decam_r, decam_i, decam_z)
+        pmra_err, pmdec_err = get_pm_uncertainties(np.array(gaia_g))
+    
+    if pm_phi1:
+        for i in range(len(feat[:, 1])):
+            feat[i, 1] = np.random.normal(loc=feat[i, 1], scale=np.random.choice(pmra_err), size=1)[0]
+        
+    if pm_phi2:
+        for i in range(len(feat[:, 2])):
+            feat[i, 2] = np.random.normal(loc=feat[i, 2], scale=np.random.choice(pmdec_err), size=1)[0]
+            
+    if v_r:
+        for i in range(len(feat[:, 3])):
+            # Draw one sample from a normal distribution with 10% uncertainty
+            feat[i, 3] = np.random.normal(loc=feat[i, 3], scale=0.1 * np.abs(feat[i, 3]), size=1)[0]
+        
+    if dist:
+        for i in range(len(feat[:, 4])):
+            # Draw one sample from a normal distribution with 10% uncertainty
+            feat[i, 4] = np.random.normal(loc=feat[i, 4], scale=0.1 * np.abs(feat[i, 4]), size=1)[0]
+        
+    return feat
