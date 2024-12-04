@@ -35,7 +35,7 @@ def read_process_dataset(
     data_dir: Union[str, Path], features: List[str] = None, labels: List[str] = None,
     binning_fn: str = None, binning_args: dict = None, num_datasets: int = 1, num_subsamples: int = 1,
     subsample_factor: int = 1, bounds: dict = None, frac: bool = False, use_width: bool = True,
-    start_dataset: int = 0,
+    start_dataset: int = 0, add_uncertainty: bool = False
 ):
     """ Read the dataset and preprocess
 
@@ -114,6 +114,19 @@ def read_process_dataset(
                 # subsample the stream
                 phi1_subsample, phi2_subsample, feat_subsample = preprocess_utils.subsample_arrays(
                     [phi1, phi2, feat], subsample_factor=subsample_factor)
+
+                if add_uncertainty:
+                    # Add uncertainty to the features
+                    features_list = ['phi1'] + DEFAULT_FEATURES
+                    feat_subsample = preprocess_utils.add_uncertainty(
+                        feat=feat_subsample,
+                        feat_list=features_list,
+                        dist=True,
+                        v_r=True,
+                        pm_phi1=True,
+                        pm_phi2=True
+                    )
+
 
                 if binning_fn is not 'particle':
                     # bin the stream
