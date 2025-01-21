@@ -36,12 +36,16 @@ def train(
         if config.overwrite:
             shutil.rmtree(workdir)
         elif config.get('checkpoint', None) is not None:
-            checkpoint_path = os.path.join(
-                workdir, 'lightning_logs/checkpoints', config.checkpoint)
+            if os.path.isabs(config.checkpoint):
+                checkpoint_path = config.checkpoint  # Use the full path directly
+            else:
+                checkpoint_path = os.path.join(
+                    workdir, 'lightning_logs/checkpoints', config.checkpoint)
         else:
             raise ValueError(
                 f"Workdir {workdir} already exists. Please set overwrite=True "
                 "to overwrite the existing directory.")
+
 
     # convert config to yaml and save
     os.makedirs(workdir, exist_ok=True)
@@ -92,26 +96,44 @@ def train(
     )
 
     # create model
+    reset_optimizer = config.get('reset_optimizer', False)
+    logging.info(f'Using checkpoint {checkpoint_path}')
     if config.flows.zuko:
-        model = zuko_regressor.Regressor(
-            output_size=config.output_size,
-            featurizer_args=config.featurizer,
-            flows_args=config.flows,
-            mlp_args=config.mlp,
-            optimizer_args=config.optimizer,
-            scheduler_args=config.scheduler,
-            norm_dict=norm_dict,
-        )
+        if checkpoint_path and reset_optimizer:
+            logging.info('Resetting optimizer')
+            # Load model from checkpoint if specified, resetting optimizer if needed
+            model = zuko_regressor.Regressor.load_from_checkpoint(
+                checkpoint_path=checkpoint_path, norm_dict=norm_dict
+            )
+            checkpoint_path = None  # Clear checkpoint to avoid reloading
+        else:
+            # Initialize a new model with specified configuration
+            model = zuko_regressor.Regressor(
+                output_size=config.output_size,
+                featurizer_args=config.featurizer,
+                flows_args=config.flows,
+                mlp_args=config.mlp,
+                optimizer_args=config.optimizer,
+                scheduler_args=config.scheduler,
+                norm_dict=norm_dict,
+            )
     else:
-        model = regressor.Regressor(
-            output_size=config.output_size,
-            featurizer_args=config.featurizer,
-            flows_args=config.flows,
-            mlp_args=config.mlp,
-            optimizer_args=config.optimizer,
-            scheduler_args=config.scheduler,
-            norm_dict=norm_dict,
-        )
+        if checkpoint_path and reset_optimizer:
+            model = regressor.Regressor.load_from_checkpoint(
+                checkpoint_path=checkpoint_path, norm_dict=norm_dict)
+            checkpoint_path = None
+        else:
+            model = regressor.Regressor(
+                output_size=config.output_size,
+                featurizer_args=config.featurizer,
+                flows_args=config.flows,
+                mlp_args=config.mlp,
+                optimizer_args=config.optimizer,
+                scheduler_args=config.scheduler,
+                norm_dict=norm_dict,
+            )
+
+    print(norm_dict, model.norm_dict)
 
     # create the trainer object
     callbacks = [
