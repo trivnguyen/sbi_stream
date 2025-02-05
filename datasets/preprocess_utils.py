@@ -1,6 +1,7 @@
 
 import numpy as np
 from scipy.interpolate import LSQUnivariateSpline
+import pandas as pd
 
 
 def approximate_arc_length(spline, x_arr):
@@ -243,3 +244,53 @@ def bin_stream_hilmi24(
     feat_count = np.concatenate([feat_count_ab, feat_count_bl])
 
     return phi1_bcent, feat_mean, feat_stdv, feat_count
+
+def add_uncertainty(
+    phi1: np.ndarray,
+    phi2: np.ndarray,
+    feat: np.ndarray,
+    dist = True,
+    v_r = True,
+    pm_phi1 = True,
+    pm_phi2 = True,
+    uncertainty = "present"):
+    
+    """ Add uncertainties to the features: distance, radial velocity, 
+    proper motions in phi1, and proper motions in phi2. """
+    
+    # Load the csv file containing the proper motion and radial velocity uncertainties
+    df = pd.read_csv("sim_uncertainty.csv")
+    
+    # Define the sample size based on the uncertainty type
+    sample_size = 96 if uncertainty == "present" else 515 if uncertainty == "future"
+    
+    # Downsample the arrays to the sample size
+    indices = np.random.choice(phi1.shape[0], sample_size, replace=False)
+    phi1, phi2, feat = phi1[indices], phi2[indices], feat[indices, :]
+    
+    # Add uncertainties to the features
+    
+    if uncertainty == "present":
+        if pm_phi1:
+            feat[:, 1] += np.random.normal(loc=0, scale=df['pmra_unc_present'].values, size=feat[:, 1].shape)
+            
+        if pm_phi2:
+            feat[:, 2] += np.random.normal(loc=0, scale=df['pmdec_unc_present'].values, size=feat[:, 2].shape)
+            
+        if v_r:
+            feat[:, 3] += np.random.normal(loc=0, scale=0.1 * np.abs(feat[:, 3]), size=feat[:, 3].shape)
+            
+    if uncertainty == "future":
+        if pm_phi1:
+            feat[:, 1] += np.random.normal(loc=0, scale=df['pmra_unc_10yr'].values, size=feat[:, 1].shape)
+            
+        if pm_phi2:
+            feat[:, 2] += np.random.normal(loc=0, scale=df['pmdec_unc_10yr'].values, size=feat[:, 2].shape)
+            
+        if v_r:
+            feat[:, 3] += np.random.normal(loc=0, scale=df['vr_unc'].values, size=feat[:, 3].shape)
+        
+    if dist:
+        feat[:, 4] += np.random.normal(loc=0, scale=0.1 * np.abs(feat[:, 4]), size=feat[:, 4].shape)
+        
+    return phi1, phi2, feat
