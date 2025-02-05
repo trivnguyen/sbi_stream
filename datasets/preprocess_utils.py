@@ -262,7 +262,7 @@ def add_uncertainty(
     df = pd.read_csv("sim_uncertainty.csv")
     
     # Define the sample size based on the uncertainty type
-    sample_size = 96 if uncertainty == "present" else 515 if uncertainty == "future"
+    sample_size = 96 if uncertainty == "present" else 396 if uncertainty == "future"
     
     # Downsample the arrays to the sample size
     indices = np.random.choice(phi1.shape[0], sample_size, replace=False)
