@@ -36,20 +36,21 @@ def sample(
         padding_mask = batch[3].to(model.device)
 
         flow_context = model(x, t, padding_mask)
-        sample = model.flows.sample(num_samples, context=flow_context)
-        samples.append(sample.cpu().numpy())
-        labels.append(y.cpu().numpy())
+        sample = model.flows(flow_context).sample((num_samples,))
+        sample = torch.transpose(sample, 0, 1)  # convert to (batch, num_samples, feat)
+        samples.append(sample.cpu())
+        labels.append(y.cpu())
 
-    samples = np.concatenate(samples, axis=0)
-    labels = np.concatenate(labels, axis=0)
+    samples = torch.cat(samples, axis=0)
+    labels = torch.cat(labels, axis=0)
 
     if norm_dict is not None:
         y_loc = norm_dict['y_loc']
         y_scale = norm_dict['y_scale']
         if isinstance(y_loc, torch.Tensor):
-            y_loc = y_loc.cpu().numpy()
+            y_loc = y_loc.cpu()
         if isinstance(y_scale, torch.Tensor):
-            y_scale = y_scale.cpu().numpy()
+            y_scale = y_scale.cpu()
 
         samples = samples * y_scale + y_loc
         labels = labels * y_scale + y_loc
@@ -85,7 +86,8 @@ def sample_no_labels(
         padding_mask = batch[2].to(model.device)
 
         flow_context = model(x, t, padding_mask)
-        sample = model.flows.sample(num_samples, context=flow_context)
+        sample = model.flows(flow_context).sample((num_samples,))
+        sample = torch.transpose(sample, 0, 1)  # convert to (batch, num_samples, feat)
         samples.append(sample.cpu().numpy())
 
     samples = np.concatenate(samples, axis=0)

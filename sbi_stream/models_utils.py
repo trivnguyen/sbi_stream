@@ -4,14 +4,20 @@ import torch.nn as nn
 import math
 
 class WarmUpCosineAnnealingLR(torch.optim.lr_scheduler.LambdaLR):
-    def __init__(self, optimizer, decay_steps, warmup_steps, eta_min=0, last_epoch=-1):
+    def __init__(self, optimizer, decay_steps, warmup_steps, eta_min=0, last_epoch=-1, restart=False):
         self.decay_steps = decay_steps
         self.warmup_steps = warmup_steps
         self.eta_min = eta_min
+        self.restart = restart
         super().__init__(
             optimizer, self.lr_lambda, last_epoch=last_epoch)
 
     def lr_lambda(self, step):
+        if (step >= self.decay_steps):
+            if self.restart:
+                step = step % self.decay_steps
+            else:
+                step = self.decay_steps
         if step < self.warmup_steps:
             return float(step) / float(max(1, self.warmup_steps))
         return self.eta_min + (
@@ -85,7 +91,9 @@ def configure_optimizers(parameters,  optimizer_args, scheduler_args=None):
             optimizer,
             decay_steps=scheduler_args.decay_steps,
             warmup_steps=scheduler_args.warmup_steps,
-            eta_min=scheduler_args.eta_min)
+            eta_min=scheduler_args.eta_min,
+            restart=scheduler_args.get('restart', False),
+        )
     else:
         raise NotImplementedError(
             "Scheduler {} not implemented".format(self.scheduler_args.name))

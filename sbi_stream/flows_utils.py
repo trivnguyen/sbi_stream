@@ -8,7 +8,8 @@ import zuko
 from zuko.flows import (
     Flow,
     MaskedAutoregressiveTransform,
-    Unconditional,
+    UnconditionalTransform,
+    UnconditionalDistribution
 )
 from zuko.distributions import DiagNormal
 
@@ -53,7 +54,7 @@ def build_flows(
 
     flow = zuko.flows.Flow(
         transform=transforms,
-        base=Unconditional(
+        base=UnconditionalDistribution(
             DiagNormal, torch.zeros(features), torch.ones(features), buffer=True)
     )
     return flow
