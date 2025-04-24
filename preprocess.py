@@ -53,6 +53,7 @@ def preprocess(config: ConfigDict):
             bounds=config.get("label_bounds", None),
             use_width=config.get('use_width', True),
             use_density=config.get('use_density', True),
+            uncertainty=config.get('uncertainty', None)
             num_datasets=1,
             start_dataset=i,
         )
