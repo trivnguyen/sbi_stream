@@ -244,51 +244,45 @@ def bin_stream_hilmi24(
     return phi1_bcent, feat_mean, feat_stdv, feat_count
 
 def add_uncertainty(
-    phi1: np.ndarray,
-    phi2: np.ndarray,
-    feat: np.ndarray,
-    dist = True,
-    v_r = True,
-    pm_phi1 = True,
-    pm_phi2 = True,
-    uncertainty = "present"):
-    
-    """ Add uncertainties to the features: distance, radial velocity, 
-    proper motions in phi1, and proper motions in phi2. """
-    
+    phi1: np.ndarray, phi2: np.ndarray, feat: np.ndarray,
+    features: list, uncertainty: str = "present"
+):
+    """ Add uncertainties to the features: distance, radial velocity,
+    proper motions in phi1, and proper motions in phi2.
+    """
+
     # Load the csv file containing the proper motion and radial velocity uncertainties
     df = pd.read_csv("sim_uncertainty.csv")
-    
+
     # Define the sample size based on the uncertainty type
-    sample_size = 96 if uncertainty == "present" else 396 if uncertainty == "future"
-    
+    # sample_size = 96 if uncertainty == "present" else 396 if uncertainty == "future"
+
     # Downsample the arrays to the sample size
-    indices = np.random.choice(phi1.shape[0], sample_size, replace=False)
-    phi1, phi2, feat = phi1[indices], phi2[indices], feat[indices, :]
-    
+    # indices = np.random.choice(phi1.shape[0], sample_size, replace=False)
+    # phi1, phi2, feat = phi1[indices], phi2[indices], feat[indices, :]
+
+    # Compute the uncertainty vector
+    num_samples = len(phi1)
+
+    if uncertainty is not None:
+        feat_err = {}
+        if uncertainty == "present":
+            feat_err['pm1'] = np.random.normal(loc=0, scale=df['pmra_unc_present'].values, size=num_samples)
+            feat_err['pm2'] = np.random.normal(loc=0, scale=df['pmdec_unc_present'].values, size=num_samples)
+            feat_err['vr'] np.random.normal(loc=0, scale=0.1 * np.abs(feat[:, features.index('vr')]))
+        elif uncertainty == "future":
+            feat_err['pm1'] = np.random.normal(loc=0, scale=df['pmra_unc_10yr'].values, size=num_samples)
+            feat_err['pm2'] = np.random.normal(loc=0, scale=df['pmdec_unc_10yr'].values, size=num_samples)
+            feat_err['vr'] = np.random.normal(loc=0, scale=df['vr_unc'].values, size=num_samples)
+        else:
+            raise ValueError('`uncertainty` must be either "present" or "future".')
+        feat_err['dist'] = np.random.normal(loc=0, scale=0.1 * np.abs(feat[:, features.index('dist')]))
+        feat_err['phi2'] = np.zeroes(num_samples)
+        feat_err = np.stack([feat_err[f] for f in features])
+    else:
+        feat_err = np.zeros_like(feat)
+
     # Add uncertainties to the features
-    
-    if uncertainty == "present":
-        if pm_phi1:
-            feat[:, 1] += np.random.normal(loc=0, scale=df['pmra_unc_present'].values, size=feat[:, 1].shape)
-            
-        if pm_phi2:
-            feat[:, 2] += np.random.normal(loc=0, scale=df['pmdec_unc_present'].values, size=feat[:, 2].shape)
-            
-        if v_r:
-            feat[:, 3] += np.random.normal(loc=0, scale=0.1 * np.abs(feat[:, 3]), size=feat[:, 3].shape)
-            
-    if uncertainty == "future":
-        if pm_phi1:
-            feat[:, 1] += np.random.normal(loc=0, scale=df['pmra_unc_10yr'].values, size=feat[:, 1].shape)
-            
-        if pm_phi2:
-            feat[:, 2] += np.random.normal(loc=0, scale=df['pmdec_unc_10yr'].values, size=feat[:, 2].shape)
-            
-        if v_r:
-            feat[:, 3] += np.random.normal(loc=0, scale=df['vr_unc'].values, size=feat[:, 3].shape)
-        
-    if dist:
-        feat[:, 4] += np.random.normal(loc=0, scale=0.1 * np.abs(feat[:, 4]), size=feat[:, 4].shape)
-        
-    return phi1, phi2, feat
+    feat = feat + feat_err
+
+    return phi1, phi2, feat, feat_err

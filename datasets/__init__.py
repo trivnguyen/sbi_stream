@@ -1,7 +1,8 @@
 
 import os
+import pickle
 from pathlib import Path
-from typing import List, Tuple, Union
+from typing import List, Tuple, Union, Optional
 
 import numpy as np
 import pandas as pd
@@ -30,12 +31,12 @@ def calculate_derived_properties(table):
     table['vtotal'] = np.sqrt(table['vphi']**2 + table['vz']**2)
     return table
 
-
-def read_process_dataset(
+def read_raw_datasets(
     data_dir: Union[str, Path], features: List[str] = None, labels: List[str] = None,
-    binning_fn: str = None, binning_args: dict = None, num_datasets: int = 1, num_subsamples: int = 1,
-    subsample_factor: int = 1, bounds: dict = None, frac: bool = False, use_width: bool = True,
-    start_dataset: int = 0, uncertainty: str = None
+    binning_fn: str = None, binning_args: dict = None, num_datasets: int = 1,
+    start_dataset: int = 0, num_subsamples: int = 1, subsample_factor: int = 1,
+    bounds: dict = None, use_density: bool = True, use_width: bool = True,
+    uncertainty: Optional[str] = None,
 ):
     """ Read the dataset and preprocess
 
@@ -51,23 +52,20 @@ def read_process_dataset(
         Args of the binning function
     num_datasets : int, optional
         Number of datasets to read in. Default is 1.
+    start_dataset: int
+        Index to start reading the dataset
     num_subsamples : int, optional
         Number of subsamples to use. Default is 1.
     subsample_factor : int, optional
         Factor to subsample the data. Default is 1.
     bounds : dict, optional
         Dictionary containing the bounds for each label. Default is None.
-    frac: bool, optional
-        If True, read datasets with two additional features:
-        number and fraction of stars in each bin.
-        Default is False.
+    use_density: bool, optional
+        If True, use the fraction of stars in each bin
     use_width: bool, optional
         If True, use the width of the stream in each bin
-    start_dataset: int
-        Index to start reading the dataset
-    uncertainty: str
-        Add uncertainty to the features: None, "present", or "future"
-        Default is None.
+    uncertainty: bool, optional,
+        If not None, include uncertainty. Either "present" or "future"
     """
     # default args
     labels = labels or DEFAULT_LABELS
@@ -118,18 +116,9 @@ def read_process_dataset(
                 phi1_subsample, phi2_subsample, feat_subsample = preprocess_utils.subsample_arrays(
                     [phi1, phi2, feat], subsample_factor=subsample_factor)
 
-                if uncertainty is not None:
-                    # add uncertainty to the features
-                    phi1_subsample, phi2_subsample, feat_subsample = preprocess_utils.add_uncertainty(
-                                                                      phi1_subsample,
-                                                                      phi2_subsample,
-                                                                      feat_subsample, 
-                                                                      dist = True,
-                                                                      v_r = True,
-                                                                      pm_phi1 = True,
-                                                                      pm_phi2 = True,
-                                                                      uncertainty = uncertainty)
-                    
+                phi1_subsample, phi2_subsample, feat_subsample, _ = preprocess_utils.add_uncertainty(
+                    phi1_subsample, phi2_subsample, feat_subsample, features,
+                    uncertainty=uncertainty)
 
                 if binning_fn is not 'particle':
                     # bin the stream
@@ -149,9 +138,8 @@ def read_process_dataset(
                     all_feats.append(feat_mean)
                     if use_width:
                         all_feats.append(feat_stdv)
-                    if frac:
-                        feat_frac = feat_count / np.sum(feat_count)
-                        all_feats.append(feat_frac)
+                    if use_density:
+                        all_feats.append(feat_count / np.sum(feat_count))
                     all_feats = np.concatenate(all_feats, axis=1)
                     x.append(all_feats)
                     y.append(label)
@@ -169,9 +157,33 @@ def read_process_dataset(
 
     logging.info('Total number of samples: {}'.format(len(x)))
 
-    x, padding_mask = preprocess_utils.pad_and_create_mask(x)
-    t, _ = preprocess_utils.pad_and_create_mask(t)
-    y = np.stack(y, axis=0)
+    if len(x) > 0:
+        x, padding_mask = preprocess_utils.pad_and_create_mask(x)
+        t, _ = preprocess_utils.pad_and_create_mask(t)
+        y = np.stack(y, axis=0)
+        return x, y, t, padding_mask
+    else:
+        return None
+
+
+def read_processed_datasets(
+    data_dir: Union[str, Path], num_datasets: int = 1, start_dataset: int = 0,
+):
+    x, y, t, padding_mask = [], [], [], []
+    for i in tqdm(range(start_dataset, start_dataset + num_datasets)):
+        data_path = os.path.join(data_dir, f'data.{i}.pkl')
+        if not os.path.exists(data_path):
+            continue
+        with open(data_path, "rb") as f:
+            d = pickle.load(f)
+        x.append(d[0])
+        y.append(d[1])
+        t.append(d[2])
+        padding_mask.append(d[3])
+    x = np.concatenate(x)
+    y = np.concatenate(y)
+    t = np.concatenate(t)
+    padding_mask = np.concatenate(padding_mask)
 
     return x, y, t, padding_mask
 
@@ -202,8 +214,14 @@ def prepare_dataloader(
         mask = np.repeat(~padding_mask[:num_train, :, None], x.shape[-1], axis=-1)
         x_loc = x[:num_train].mean(axis=(0, 1), where=mask)
         x_scale = x[:num_train].std(axis=(0, 1), where=mask)
-        y_loc = y[:num_train].mean(axis=0)
-        y_scale = y[:num_train].std(axis=0)
+
+        # normalize y such that it is in range [-1, 1]
+        # this is required for NSF
+        y_min = np.min(y[:num_train], axis=0)
+        y_max = np.max(y[:num_train], axis=0)
+        y_loc = (y_min + y_max) / 2
+        y_scale = (y_max - y_min) / 2
+
         # normalize time by min-max scaling
         t_loc = t[:num_train].min()
         t_scale = t[:num_train].max() - t_loc
