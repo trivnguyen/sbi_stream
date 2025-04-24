@@ -2,7 +2,7 @@
 import os
 import pickle
 import sys
-sys.path.append('/global/homes/t/tvnguyen/snpe_stream')
+sys.path.append('/global/homes/t/tvnguyen/sbi_stream')
 import shutil
 import yaml
 
@@ -16,7 +16,7 @@ from sbi.utils import BoxUniform
 from ml_collections import ConfigDict, config_flags
 
 import datasets
-from snpe_stream.npe import NPE
+from sbi_stream.npe import NPE
 
 
 def generate_seeds(base_seed, num_seeds, seed_range=(0, 2**32 - 1)):
