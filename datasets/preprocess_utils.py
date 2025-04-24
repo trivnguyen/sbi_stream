@@ -140,7 +140,6 @@ def bin_stream(
     feat_mean = feat_mean[mask]
     feat_stdv = feat_stdv[mask]
     feat_count = feat_count[mask]
-
     return phi1_bin_centers, feat_mean, feat_stdv, feat_count
 
 
@@ -210,7 +209,6 @@ def bin_stream_spline(
     feat_mean = feat_mean[mask]
     feat_stdv = feat_stdv[mask]
     feat_count = feat_count[mask]
-
     return arc_bin_centers, feat_mean, feat_stdv, feat_count
 
 def bin_stream_hilmi24(
