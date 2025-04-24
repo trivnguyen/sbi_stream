@@ -1,7 +1,7 @@
 
 import numpy as np
-from scipy.interpolate import LSQUnivariateSpline
 import pandas as pd
+from scipy.interpolate import LSQUnivariateSpline
 
 
 def approximate_arc_length(spline, x_arr):
