@@ -6,8 +6,8 @@ from tqdm import tqdm
 
 @torch.no_grad()
 def sample(
-    model, data_loader, num_samples=1, return_labels=True,
-    norm_dict=None):
+    model, data_loader, num_samples=1, return_labels=True, return_log_probs=False,
+    norm_dict=None,):
     """ Sampling from a trained model.
 
     Parameters
@@ -20,6 +20,8 @@ def sample(
         Number of samples to draw from the model. The default is 1.
     return_labels : bool, optional
         Whether to return the labels. The default is True.
+    return_log_probs: bool, optional
+        Return the log probs of each sample. The default is False.
     norm_dict : dict, optional
         Dictionary with normalization parameters. The default is None.
     """
@@ -27,6 +29,7 @@ def sample(
 
     samples = []
     labels = []
+    log_probs = []
 
     loop = tqdm(data_loader, desc='Sampling')
     for batch in loop:
@@ -36,13 +39,23 @@ def sample(
         padding_mask = batch[3].to(model.device)
 
         flow_context = model(x, t, padding_mask)
-        sample = model.flows(flow_context).sample((num_samples,))
+        flow = model.flows(flow_context)
+        sample = flow.sample((num_samples,))
+
+        if return_log_probs:
+            log_prob = flow.log_prob(sample)
+            log_prob = torch.transpose(log_prob, 0, 1)
+            log_probs.append(log_prob.cpu())
+
         sample = torch.transpose(sample, 0, 1)  # convert to (batch, num_samples, feat)
         samples.append(sample.cpu())
         labels.append(y.cpu())
 
+
     samples = torch.cat(samples, axis=0)
     labels = torch.cat(labels, axis=0)
+    if return_log_probs:
+        log_probs = torch.cat(log_probs, axis=0)
 
     if norm_dict is not None:
         y_loc = norm_dict['y_loc']
@@ -55,9 +68,12 @@ def sample(
         samples = samples * y_scale + y_loc
         labels = labels * y_scale + y_loc
 
+    return_data = [samples, ]
     if return_labels:
-        return samples, labels
-    return samples
+        return_data.append(labels)
+    if return_log_probs:
+        return_data.append(log_probs)
+    return return_data
 
 @torch.no_grad()
 def sample_no_labels(
