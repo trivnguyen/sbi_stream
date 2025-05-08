@@ -13,8 +13,8 @@ from sbi.neural_nets.estimators.shape_handling import (
     reshape_to_sample_batch_event,
 )
 
-from snpe_stream import flows_utils
-from snpe_stream import models, models_utils
+from sbi_stream import flows_utils
+from sbi_stream import models, models_utils
 
 
 class NPE(pl.LightningModule):
