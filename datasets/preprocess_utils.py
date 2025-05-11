@@ -248,11 +248,13 @@ def bin_stream_hilmi24(
 
 def compute_V(g: float, r: float) -> float:
     """
-    https://www.sdss3.org/dr8/algorithms/sdssUBVRITransform.php?utm_source=chatgpt.com 
-    V      =    g - 0.59*(g-r) - 0.01    0.01
-    
-    Compute the V-band magnitude using the transformation formula:
-    
+    Computes the V-band magnitude from SDSS g and r magnitudes.
+
+    Transformation from:
+    Jester et al. (2005), "The Sloan Digital Sky Survey View of the Palomar-Green Bright Quasar Survey"
+    Astronomical Journal, 130, 873. DOI:10.1086/432466
+
+    Formula:
     V = g - 0.59 * (g - r) - 0.01
     
     Parameters:
@@ -281,7 +283,7 @@ def sigma_vr(V):
     d = 24.28729466
     return a + (b / (1 + np.exp(-c * (V - d))))
 
-def simulate_uncertainty(uncertainty: str = "present"):
+def simulate_uncertainty(uncertainty: str = "present", num_samples: int = None):
     """
     Simulate a large population of stellar uncertainties of proper motions
     and radial velocities.
@@ -289,6 +291,8 @@ def simulate_uncertainty(uncertainty: str = "present"):
     Parameters:
     - uncertainty : str
         Whether to simulate "present" or ""future" uncertainties
+    - num_samples : int
+        Number of samples to generate. 
 
     Returns:
     - pmra : np.ndarray
@@ -321,6 +325,9 @@ def simulate_uncertainty(uncertainty: str = "present"):
         mask = (mag_r >= 14.8) & (mag_r <= 21)
     elif uncertainty == "present":
         mask = (mag_r >= 14.8) & (mag_r <= 19.8)
+    else:
+        raise ValueError(f"Invalid uncertainty type: {uncertainty}. Must be 'present' or 'future'.")
+
 
     # Filter magnitudes and V-band based on cuts
     g = mag_g[mask]
@@ -339,7 +346,14 @@ def simulate_uncertainty(uncertainty: str = "present"):
 
     # Compute RV uncertainties from V-band
     vr = sigma_vr(V)
-
+    
+    if num_samples is not None:
+        # Randomly sample from the population
+        idx = np.random.choice(len(pmra), size=num_samples, replace=False)
+        pmra = pmra[idx]
+        pmdec = pmdec[idx]
+        vr = vr[idx]
+        
     # Return uncertainties
     return pmra, pmdec, vr
 
@@ -365,14 +379,11 @@ def add_uncertainty(
         feat_err = {}
         
         # Generate a pool of uncertainties 
-        pmra_pool, pmdec_pool, vr_pool = simulate_uncertainty(uncertainty=uncertainty)
+        pmra, pmdec, vr = simulate_uncertainty(uncertainty=uncertainty, num_samples=num_samples)
         
-        # Randomly sample from the pool
-        idx = np.random.choice(len(pmra_pool), size=num_samples, replace=False)
-
-        feat_err['pm1'] = np.random.normal(loc=0, scale=pmra_pool[idx], size=num_samples)
-        feat_err['pm2'] = np.random.normal(loc=0, scale=pmdec_pool[idx], size=num_samples)
-        feat_err['vr'] = np.random.normal(loc=0, scale=vr_pool[idx], size=num_samples)
+        feat_err['pm1'] = np.random.normal(loc=0, scale=pmra, size=num_samples)
+        feat_err['pm2'] = np.random.normal(loc=0, scale=pmdec, size=num_samples)
+        feat_err['vr'] = np.random.normal(loc=0, scale=vr, size=num_samples)
         feat_err['dist'] = np.random.normal(loc=0, scale=0.1 * np.abs(feat[:, features.index('dist')]))
         feat_err['phi2'] = np.zeros(num_samples)
         feat_err = np.stack([feat_err[f] for f in features])
