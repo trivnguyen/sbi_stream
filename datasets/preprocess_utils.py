@@ -251,6 +251,7 @@ def compute_V(g: float, r: float) -> float:
     Computes the V-band magnitude from SDSS g and r magnitudes.
 
     Transformation from:
+    URL: https://www.sdss3.org/dr8/algorithms/sdssUBVRITransform.php
     Jester et al. (2005), "The Sloan Digital Sky Survey View of the Palomar-Green Bright Quasar Survey"
     Astronomical Journal, 130, 873. DOI:10.1086/432466
 
@@ -302,6 +303,15 @@ def simulate_uncertainty(uncertainty: str = "present", num_samples: int = None):
     - vr : np.ndarray
         Radial velocity uncertainty (km/s).
     """
+    
+    if uncertainty not in {"present", "future"}:
+        raise ValueError(f"Invalid uncertainty type: {uncertainty}. Must be 'present' or 'future'.")
+    
+    # Set magnitude cuts for present/future scenarios
+    if uncertainty == "future":
+        mag_r_min, mag_r_max = 14.8, 21.0
+    elif uncertainty == "present":
+        mag_r_min, mag_r_max = 14.8, 19.8
 
     # Choose Chabrier IMF and generate isochrone
     imf_chabrier = imfFactory('Chabrier2003')
@@ -313,26 +323,29 @@ def simulate_uncertainty(uncertainty: str = "present", num_samples: int = None):
         imf=imf_chabrier,
         survey='des'
     )
+    
+    # Conservative buffer
+    target_n = num_samples if num_samples is not None else 12000
+    buffer_factor = 50
+    stellar_mass = target_n * buffer_factor * iso.stellar_mass()
 
     # Simulate synthetic stars from the isochrone
-    mag_g, mag_r = iso.simulate(stellar_mass=2e7)  # Generate star mags using total mass
+    while True:
+        mag_g, mag_r = iso.simulate(stellar_mass=stellar_mass) 
+        
+        # Filter magnitudes and V-band based on cuts
+        mask = (mag_r >= mag_r_min) & (mag_r <= mag_r_max)
+        g = mag_g[mask]
+        r = mag_r[mask]
+      
+        # Check if the number of stars is within the desired range
+        if num_samples is None or len(g) >= num_samples:
+            break
+        stellar_mass *= 2.5  # boost mass if we don’t have enough stars
+
 
     # Compute V-band magnitudes for the synthetic population
-    V = compute_V(mag_g, mag_r)
-
-    # Set magnitude cuts for present/future scenarios
-    if uncertainty == "future":
-        mask = (mag_r >= 14.8) & (mag_r <= 21)
-    elif uncertainty == "present":
-        mask = (mag_r >= 14.8) & (mag_r <= 19.8)
-    else:
-        raise ValueError(f"Invalid uncertainty type: {uncertainty}. Must be 'present' or 'future'.")
-
-
-    # Filter magnitudes and V-band based on cuts
-    g = mag_g[mask]
-    r = mag_r[mask]
-    V = V[mask]
+    V = compute_V(g, r)
 
     # Compute Gaia DR3 proper motion uncertainties (in microarcsec → convert to mas)
     pmra, pmdec = proper_motion_uncertainty(g, release='dr3')
