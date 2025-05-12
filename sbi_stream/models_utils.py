@@ -38,6 +38,8 @@ def get_activation(activation):
         return nn.LeakyReLU(activation.leaky_relu_alpha)
     elif activation.name.lower() == 'gelu':
         return nn.GELU()
+    elif activation.name.lower() == 'silu':
+        return nn.SiLU()
     else:
         raise ValueError(f'Unknown activation function: {activation.name}')
 
@@ -54,6 +56,8 @@ def get_activation_zuko(activation):
         return nn.Sigmoid
     elif activation.name.lower() == 'gelu':
         return nn.GELU
+    elif activation.name.lower() == 'silu':
+        return nn.SiLU
     else:
         raise ValueError(f'Unknown activation function: {activation.name}')
 
