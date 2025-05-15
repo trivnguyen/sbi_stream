@@ -48,12 +48,14 @@ def preprocess(config: ConfigDict):
             labels=config.labels,
             binning_fn=config.binning_fn,
             binning_args=config.binning_args,
+            phi1_min=config.phi1_min,
+            phi1_max=config.phi1_max,
             num_subsamples=config.get("num_subsamples", 1),
             subsample_factor=config.get("subsample_factor", 1),
             bounds=config.get("label_bounds", None),
             use_width=config.get('use_width', True),
             use_density=config.get('use_density', True),
-            uncertainty=config.get('uncertainty', None)
+            uncertainty=config.get('uncertainty', None),
             num_datasets=1,
             start_dataset=i,
         )
