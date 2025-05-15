@@ -257,11 +257,11 @@ def compute_V(g: float, r: float) -> float:
 
     Formula:
     V = g - 0.59 * (g - r) - 0.01
-    
+
     Parameters:
     g (float): g-band magnitude
     r (float): r-band magnitude
-    
+
     Returns:
     float: Computed V-band magnitude
     """
@@ -269,7 +269,7 @@ def compute_V(g: float, r: float) -> float:
 
 def sigma_vr(V):
     """
-    Computes the radial velocity accuracy (sigma_vr) for a given magnitude V 
+    Computes the radial velocity accuracy (sigma_vr) for a given magnitude V
     using the fitted logistic-like function.
 
     Parameters:
@@ -284,16 +284,16 @@ def sigma_vr(V):
     d = 24.28729466
     return a + (b / (1 + np.exp(-c * (V - d))))
 
-def simulate_uncertainty(uncertainty: str = "present", num_samples: int = None):
+def simulate_uncertainty(num_samples: int, uncertainty: str = "present"):
     """
     Simulate a large population of stellar uncertainties of proper motions
     and radial velocities.
 
     Parameters:
+    - num_samples : int
+        Number of samples to generate.
     - uncertainty : str
         Whether to simulate "present" or ""future" uncertainties
-    - num_samples : int
-        Number of samples to generate. 
 
     Returns:
     - pmra : np.ndarray
@@ -303,10 +303,10 @@ def simulate_uncertainty(uncertainty: str = "present", num_samples: int = None):
     - vr : np.ndarray
         Radial velocity uncertainty (km/s).
     """
-    
+
     if uncertainty not in {"present", "future"}:
         raise ValueError(f"Invalid uncertainty type: {uncertainty}. Must be 'present' or 'future'.")
-    
+
     # Set magnitude cuts for present/future scenarios
     if uncertainty == "future":
         mag_r_min, mag_r_max = 14.8, 21.0
@@ -323,52 +323,46 @@ def simulate_uncertainty(uncertainty: str = "present", num_samples: int = None):
         imf=imf_chabrier,
         survey='des'
     )
-    
+
     # Conservative buffer
-    target_n = num_samples if num_samples is not None else 12000
-    buffer_factor = 50
-    stellar_mass = target_n * buffer_factor * iso.stellar_mass()
+    buffer_factor = 2
+    stellar_mass = num_samples * buffer_factor * iso.stellar_mass()
 
     # Simulate synthetic stars from the isochrone
-    while True:
-        mag_g, mag_r = iso.simulate(stellar_mass=stellar_mass) 
-        
+    g, r = [], []
+    num_samples_curr = 0
+    while num_samples_curr < num_samples:
+        mag_g, mag_r = iso.simulate(stellar_mass=stellar_mass)
+
         # Filter magnitudes and V-band based on cuts
         mask = (mag_r >= mag_r_min) & (mag_r <= mag_r_max)
-        g = mag_g[mask]
-        r = mag_r[mask]
-      
-        # Check if the number of stars is within the desired range
-        if num_samples is None or len(g) >= num_samples:
-            break
-        stellar_mass *= 2.5  # boost mass if we don’t have enough stars
+        g.append(mag_g[mask])
+        r.append(mag_r[mask])
 
+        num_samples_curr += np.sum(mask)
+    g = np.concatenate(g)
+    r = np.concatenate(r)
+    g = g[:num_samples]
+    r = r[:num_samples]
 
     # Compute V-band magnitudes for the synthetic population
     V = compute_V(g, r)
 
     # Compute Gaia DR3 proper motion uncertainties (in microarcsec → convert to mas)
-    pmra, pmdec = proper_motion_uncertainty(g, release='dr3')
-    pmra /= 1000
-    pmdec /= 1000
+    pmra_err, pmdec_err = proper_motion_uncertainty(g, release='dr3')
+    pmra_err /= 1000
+    pmdec_err /= 1000
 
     # Future survey: 15% of present Gaia DR3 errors
     if uncertainty == "future":
-        pmra *= 0.15
-        pmdec *= 0.15
+        pmra_err *= 0.15
+        pmdec_err *= 0.15
 
     # Compute RV uncertainties from V-band
-    vr = sigma_vr(V)
-    
-    if num_samples is not None:
-        # Randomly sample from the population
-        idx = np.random.choice(len(pmra), size=num_samples, replace=False)
-        pmra = pmra[idx]
-        pmdec = pmdec[idx]
-        vr = vr[idx]
-        
+    vr_err = sigma_vr(V)
+
     # Return uncertainties
-    return pmra, pmdec, vr
+    return pmra_err, pmdec_err, vr_err
 
 def add_uncertainty(
     phi1: np.ndarray, phi2: np.ndarray, feat: np.ndarray,
@@ -390,14 +384,16 @@ def add_uncertainty(
 
     if uncertainty is not None:
         feat_err = {}
-        
-        # Generate a pool of uncertainties 
-        pmra, pmdec, vr = simulate_uncertainty(uncertainty=uncertainty, num_samples=num_samples)
-        
-        feat_err['pm1'] = np.random.normal(loc=0, scale=pmra, size=num_samples)
-        feat_err['pm2'] = np.random.normal(loc=0, scale=pmdec, size=num_samples)
-        feat_err['vr'] = np.random.normal(loc=0, scale=vr, size=num_samples)
-        feat_err['dist'] = np.random.normal(loc=0, scale=0.1 * np.abs(feat[:, features.index('dist')]))
+
+        # Generate a pool of uncertainties
+        pmra_err, pmdec_err, vr_err = simulate_uncertainty(
+            num_samples, uncertainty=uncertainty)
+
+        feat_err['pm1'] = np.random.normal(loc=0, scale=pmra_err)
+        feat_err['pm2'] = np.random.normal(loc=0, scale=pmdec_err)
+        feat_err['vr'] = np.random.normal(loc=0, scale=vr_err)
+        feat_err['dist'] = np.random.normal(
+            loc=0, scale=0.1 * np.abs(feat[:, features.index('dist')]))
         feat_err['phi2'] = np.zeros(num_samples)
         feat_err = np.stack([feat_err[f] for f in features])
     else:
