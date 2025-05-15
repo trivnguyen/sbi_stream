@@ -35,6 +35,7 @@ def read_raw_datasets(
     data_dir: Union[str, Path], features: List[str] = None, labels: List[str] = None,
     binning_fn: str = None, binning_args: dict = None, num_datasets: int = 1,
     start_dataset: int = 0, num_subsamples: int = 1, subsample_factor: int = 1,
+    phi1_min: Optional[float] = None, phi1_max: Optional[float] = None,
     bounds: dict = None, use_density: bool = True, use_width: bool = True,
     uncertainty: Optional[str] = None,
 ):
@@ -99,6 +100,13 @@ def read_raw_datasets(
             phi2 = data['phi2'][pid]
             feat = np.stack([data[f][pid] for f in features], axis=1)
 
+            phi1_min = phi1_min or phi1.min()
+            phi1_max = phi1_max or phi1.max()
+            mask = (phi1_min <= phi1) & (phi1 < phi1_max)
+            phi1 = phi1[mask]
+            phi2 = phi2[mask]
+            feat = feat[mask]
+
             # ignore out of bounds labels
             if bounds is not None:
                 is_bound = True
@@ -115,12 +123,11 @@ def read_raw_datasets(
                 # subsample the stream
                 phi1_subsample, phi2_subsample, feat_subsample = preprocess_utils.subsample_arrays(
                     [phi1, phi2, feat], subsample_factor=subsample_factor)
-
                 phi1_subsample, phi2_subsample, feat_subsample, _ = preprocess_utils.add_uncertainty(
                     phi1_subsample, phi2_subsample, feat_subsample, features,
                     uncertainty=uncertainty)
 
-                if binning_fn is not 'particle':
+                if binning_fn != 'particle':
                     # bin the stream
                     if binning_fn == 'bin_stream':
                         bin_centers, feat_mean, feat_stdv, feat_count = preprocess_utils.bin_stream(

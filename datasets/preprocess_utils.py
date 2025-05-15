@@ -392,10 +392,15 @@ def add_uncertainty(
         feat_err['pm1'] = np.random.normal(loc=0, scale=pmra_err)
         feat_err['pm2'] = np.random.normal(loc=0, scale=pmdec_err)
         feat_err['vr'] = np.random.normal(loc=0, scale=vr_err)
-        feat_err['dist'] = np.random.normal(
-            loc=0, scale=0.1 * np.abs(feat[:, features.index('dist')]))
+
+        if 'dist' in features:
+            feat_err['dist'] = np.random.normal(
+                loc=0, scale=0.1 * np.abs(feat[:, features.index('dist')]))
+        else:
+            feat_err['dist'] = np.zeros(num_samples)
         feat_err['phi2'] = np.zeros(num_samples)
-        feat_err = np.stack([feat_err[f] for f in features])
+        feat_err['phi1'] = np.zeros(num_samples)
+        feat_err = np.stack([feat_err[f] for f in features]).T
     else:
         feat_err = np.zeros_like(feat)
 
