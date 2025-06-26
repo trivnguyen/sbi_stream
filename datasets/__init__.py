@@ -192,7 +192,7 @@ def read_processed_datasets(
     t = np.concatenate(t)
     padding_mask = np.concatenate(padding_mask)
 
-    return x, y, t, padding_mask
+    return [x, y, t, padding_mask]
 
 
 def prepare_dataloader(
@@ -205,12 +205,12 @@ def prepare_dataloader(
     seed: int = 42
 ):
     """ Create dataloaders for training and evaluation. """
-    pl.seed_everything(seed)
+    rng = np.random.default_rng(seed)
 
     # unpack the data and shuffle
     x, y, t, padding_mask = data
     num_train = int(train_frac * len(x))
-    shuffle = np.random.permutation(len(x))
+    shuffle = rng.permutation(len(x))
     x = x[shuffle]
     y = y[shuffle]
     t = t[shuffle]
