@@ -96,6 +96,8 @@ def train(config: ConfigDict):
         num_workers=config.num_workers,
         norm_dict=norm_dict,
         seed=data_seed,
+        n_subsample=config.n_subsample,
+        subsample_shuffle=config.subsample_shuffle,
     )
 
     # If no checkpoint was loaded, initialize a new model with the determined norm_dict
