@@ -202,48 +202,89 @@ def prepare_dataloader(
     train_batch_size: int = 128,
     eval_batch_size: int = 128,
     num_workers: int = 0,
-    seed: int = 42
+    seed: int = 42,
+    n_subsample: int = 1,
+    subsample_shuffle: bool = True,
 ):
     """ Create dataloaders for training and evaluation. """
     rng = np.random.default_rng(seed)
 
-    # unpack the data and shuffle
+    # unpack the data
     x, y, t, padding_mask = data
-    num_train = int(train_frac * len(x))
-    shuffle = rng.permutation(len(x))
-    x = x[shuffle]
-    y = y[shuffle]
-    t = t[shuffle]
+    num_total = len(x)
+
+    if subsample_shuffle & (n_subsample > 1):
+        # special case if subsampling is enabled
+        # this is required to prevent data leakage
+        assert num_total % n_subsample == 0, f"Data size {len(x)} must be divisible by n_subsample {n_subsample}"
+        num_total_subsample = num_total // n_subsample
+
+        x = x.reshape(num_total_subsample, n_subsample, x.shape[1], x.shape[2])
+        y = y.reshape(num_total_subsample, n_subsample, y.shape[1])
+        t = t.reshape(num_total_subsample, n_subsample, t.shape[1], t.shape[2])
+        padding_mask = padding_mask.reshape(num_total_subsample, n_subsample, padding_mask.shape[1])
+
+        shuffle = rng.permutation(num_total_subsample)
+        x = x[shuffle]
+        y = y[shuffle]
+        t = t[shuffle]
+        padding_mask = padding_mask[shuffle]
+
+        # split the data into training and validation sets
+        num_train = int(train_frac * num_total_subsample)
+        x_train, x_val = x[:num_train], x[num_train:]
+        y_train, y_val = y[:num_train], y[num_train:]
+        t_train, t_val = t[:num_train], t[num_train:]
+        padding_mask_train, padding_mask_val = padding_mask[:num_train], padding_mask[num_train:]
+
+        # flatten the data back to original shape
+        x_train = x_train.reshape(-1, x_train.shape[2], x_train.shape[3])
+        y_train = y_train.reshape(-1, y_train.shape[2])
+        t_train = t_train.reshape(-1, t_train.shape[2], t_train.shape[3])
+        padding_mask_train = padding_mask_train.reshape(-1, padding_mask_train.shape[2])
+        x_val = x_val.reshape(-1, x_val.shape[2], x_val.shape[3])
+        y_val = y_val.reshape(-1, y_val.shape[2])
+        t_val = t_val.reshape(-1, t_val.shape[2], t_val.shape[3])
+        padding_mask_val = padding_mask_val.reshape(-1, padding_mask_val.shape[2])
+    else:
+        shuffle = rng.permutation(num_total)
+        x = x[shuffle]
+        y = y[shuffle]
+        t = t[shuffle]
+        padding_mask = padding_mask[shuffle]
+
+        num_train = int(train_frac * len(x))
+        x_train, x_val = x[:num_train], x[num_train:]
+        y_train, y_val = y[:num_train], y[num_train:]
+        t_train, t_val = t[:num_train], t[num_train:]
+        padding_mask_train, padding_mask_val = padding_mask[:num_train], padding_mask[num_train:]
 
     # normalize the data
     if norm_dict is None:
         # norm mask for x
-        mask = np.repeat(~padding_mask[:num_train, :, None], x.shape[-1], axis=-1)
-        x_loc = x[:num_train].mean(axis=(0, 1), where=mask)
-        x_scale = x[:num_train].std(axis=(0, 1), where=mask)
+        mask = np.repeat(~padding_mask_train[..., None], x_train.shape[-1], axis=-1)
+        x_loc = x_train.mean(axis=(0, 1), where=mask)
+        x_scale = x_train.std(axis=(0, 1), where=mask)
 
         # normalize y such that it is in range [-1, 1]
         # this is required for NSF
-        y_min = np.min(y[:num_train], axis=0)
-        y_max = np.max(y[:num_train], axis=0)
+        y_min = np.min(y_train, axis=0)
+        y_max = np.max(y_train, axis=0)
         y_loc = (y_min + y_max) / 2
         y_scale = (y_max - y_min) / 2
 
         # normalize time by min-max scaling
-        t_loc = t[:num_train].min()
-        t_scale = t[:num_train].max() - t_loc
+        t_loc = t_train.min()
+        t_scale = t_train.max() - t_loc
         norm_dict = {
             "x_loc": x_loc, "x_scale": x_scale,
             "y_loc": y_loc, "y_scale": y_scale,
             "t_loc": t_loc, "t_scale": t_scale
         }
     else:
-        x_loc = norm_dict["x_loc"]
-        x_scale = norm_dict["x_scale"]
-        y_loc = norm_dict["y_loc"]
-        y_scale = norm_dict["y_scale"]
-        t_loc = norm_dict["t_loc"]
-        t_scale = norm_dict["t_scale"]
+        x_loc, x_scale = norm_dict["x_loc"], norm_dict["x_scale"]
+        y_loc, y_scale = norm_dict["y_loc"], norm_dict["y_scale"]
+        t_loc, t_scale = norm_dict["t_loc"], norm_dict["t_scale"]
     x = (x - x_loc) / x_scale
     y = (y - y_loc) / y_scale
     t = (t - t_loc) / t_scale
@@ -255,12 +296,8 @@ def prepare_dataloader(
     padding_mask = torch.tensor(padding_mask, dtype=torch.bool)
 
     # create data loader
-    train_dset = TensorDataset(
-        x[:num_train], y[:num_train], t[:num_train],
-        padding_mask[:num_train])
-    val_dset = TensorDataset(
-        x[num_train:], y[num_train:], t[num_train:],
-        padding_mask[num_train:])
+    train_dset = TensorDataset(x_train, y_train, t_train, padding_mask_train)
+    val_dset = TensorDataset(x_val, y_val, t_val, padding_mask_val)
     train_loader = DataLoader(
         train_dset, batch_size=train_batch_size, shuffle=True,
         num_workers=num_workers, pin_memory=torch.cuda.is_available())
