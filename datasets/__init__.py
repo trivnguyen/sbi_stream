@@ -285,15 +285,24 @@ def prepare_dataloader(
         x_loc, x_scale = norm_dict["x_loc"], norm_dict["x_scale"]
         y_loc, y_scale = norm_dict["y_loc"], norm_dict["y_scale"]
         t_loc, t_scale = norm_dict["t_loc"], norm_dict["t_scale"]
-    x = (x - x_loc) / x_scale
-    y = (y - y_loc) / y_scale
-    t = (t - t_loc) / t_scale
 
-    # convert to tensors
-    x = torch.tensor(x, dtype=torch.float32)
-    y = torch.tensor(y, dtype=torch.float32)
-    t = torch.tensor(t, dtype=torch.float32)
-    padding_mask = torch.tensor(padding_mask, dtype=torch.bool)
+    # normalize the data
+    x_train = (x_train - x_loc) / x_scale
+    y_train = (y_train - y_loc) / y_scale
+    t_train = (t_train - t_loc) / t_scale
+    x_val = (x_val - x_loc) / x_scale
+    y_val = (y_val - y_loc) / y_scale
+    t_val = (t_val - t_loc) / t_scale
+
+    # convert to tensor
+    x_train = torch.tensor(x_train, dtype=torch.float32)
+    y_train = torch.tensor(y_train, dtype=torch.float32)
+    t_train = torch.tensor(t_train, dtype=torch.float32)
+    padding_mask_train = torch.tensor(padding_mask_train, dtype=torch.bool)
+    x_val = torch.tensor(x_val, dtype=torch.float32)
+    y_val = torch.tensor(y_val, dtype=torch.float32)
+    t_val = torch.tensor(t_val, dtype=torch.float32)
+    padding_mask_val = torch.tensor(padding_mask_val, dtype=torch.bool)
 
     # create data loader
     train_dset = TensorDataset(x_train, y_train, t_train, padding_mask_train)
