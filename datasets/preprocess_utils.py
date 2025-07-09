@@ -267,6 +267,22 @@ def compute_V(g: float, r: float) -> float:
     """
     return g - 0.59 * (g - r) - 0.01
 
+def compute_G(g: float, r: float) -> float:
+    """
+    Computes the Gaia G-band magnitude from SDSS g and r magnitudes.
+
+    Formula:
+    G = -0.091 + (g-r) * -0.705 + (g-r)^2 * -0.127 + g
+
+    Parameters:
+    g (float): g-band magnitude
+    r (float): r-band magnitude
+
+    Returns:
+    float: Computed G-band magnitude
+    """
+    return -0.091 + (g - r) * -0.705 + (g - r) ** 2 * -0.127 + g
+
 def sigma_vr(V):
     """
     Computes the radial velocity accuracy (sigma_vr) for a given magnitude V
@@ -348,8 +364,11 @@ def simulate_uncertainty(num_samples: int, uncertainty: str = "present"):
     # Compute V-band magnitudes for the synthetic population
     V = compute_V(g, r)
 
+    # Compute Gaia G-band magnitudes
+    G = compute_G(g, r)
+
     # Compute Gaia DR3 proper motion uncertainties (in microarcsec → convert to mas)
-    pmra_err, pmdec_err = proper_motion_uncertainty(g, release='dr3')
+    pmra_err, pmdec_err = proper_motion_uncertainty(G, release='dr3')
     pmra_err /= 1000
     pmdec_err /= 1000
 
