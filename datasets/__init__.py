@@ -177,6 +177,7 @@ def read_processed_datasets(
     data_dir: Union[str, Path], num_datasets: int = 1, start_dataset: int = 0,
 ):
     x, y, t, padding_mask = [], [], [], []
+    xlen = []
     for i in tqdm(range(start_dataset, start_dataset + num_datasets)):
         data_path = os.path.join(data_dir, f'data.{i}.pkl')
         if not os.path.exists(data_path):
@@ -187,13 +188,24 @@ def read_processed_datasets(
         y.append(d[1])
         t.append(d[2])
         padding_mask.append(d[3])
+        xlen.append(d[0].shape[1])
+
+    # Pad sequences to the maximum length
+    # check if the lengths of sequences are the same
+    if len(set(xlen)) != 1:
+        max_xlen = max(xlen)
+        for i in range(len(x)):
+            pad_len = max_xlen - xlen[i]
+            x[i] = np.pad(x[i], ((0, 0), (0, pad_len), (0, 0)), mode='constant', constant_values=0)
+            t[i] = np.pad(t[i], ((0, 0), (0, pad_len), (0, 0)), mode='constant', constant_values=0)
+            padding_mask[i] = np.pad(padding_mask[i], ((0, 0), (0, pad_len)), mode='constant', constant_values=True)
+
     x = np.concatenate(x)
     y = np.concatenate(y)
     t = np.concatenate(t)
     padding_mask = np.concatenate(padding_mask)
 
     return [x, y, t, padding_mask]
-
 
 def prepare_dataloader(
     data: Tuple,
