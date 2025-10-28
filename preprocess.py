@@ -17,11 +17,6 @@ from ml_collections import ConfigDict, config_flags
 
 import datasets
 
-def generate_seeds(base_seed, num_seeds, seed_range=(0, 2**32 - 1)):
-    """Generate a list of RNG seeds deterministically from a base seed."""
-    np.random.seed(base_seed)
-    return np.random.randint(seed_range[0], seed_range[1], size=num_seeds, dtype=np.uint32)
-
 
 def preprocess(config: ConfigDict):
 
@@ -33,9 +28,6 @@ def preprocess(config: ConfigDict):
     config_path = os.path.join(workdir, 'config.yaml')
     with open(config_path, 'w') as f:
         yaml.dump(config_dict, f, default_flow_style=False)
-
-    # generate data and training seed
-    seed = generate_seeds(config.seed, 1_000)[0]
 
     # read in the dataset and prepare the data loader for training
     data_raw_dir = os.path.join(config.root, config.name)
