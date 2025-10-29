@@ -2,6 +2,7 @@
 import numpy as np
 import pandas as pd
 from scipy.interpolate import LSQUnivariateSpline
+from scipy.interpolate import interp1d
 from ugali.analysis.imf import imfFactory
 from ugali import isochrone
 from pygaia.errors.astrometric import proper_motion_uncertainty
@@ -320,14 +321,16 @@ def simulate_uncertainty(num_samples: int, uncertainty: str = "present"):
         Radial velocity uncertainty (km/s).
     """
 
-    if uncertainty not in {"present", "future"}:
-        raise ValueError(f"Invalid uncertainty type: {uncertainty}. Must be 'present' or 'future'.")
+    if uncertainty not in {"present", "future", "spec-s5"}:
+        raise ValueError(f"Invalid uncertainty type: {uncertainty}. Must be 'present', 'future', or 'spec-s5'.")
 
     # Set magnitude cuts for present/future scenarios
     if uncertainty == "future":
         mag_r_min, mag_r_max = 14.8, 21.0
     elif uncertainty == "present":
         mag_r_min, mag_r_max = 14.8, 19.8
+    elif uncertainty == "spec-s5":
+        mag_r_min, mag_r_max = 17.0, 23.0
 
     # Choose Chabrier IMF and generate isochrone
     imf_chabrier = imfFactory('Chabrier2003')
@@ -368,18 +371,29 @@ def simulate_uncertainty(num_samples: int, uncertainty: str = "present"):
     G = compute_G(g, r)
 
     # Compute Gaia DR3 proper motion uncertainties (in microarcsec → convert to mas)
-    pmra_err, pmdec_err = proper_motion_uncertainty(G, release='dr3')
-    pmra_err /= 1000
-    pmdec_err /= 1000
-
-    # Future survey: 15% of present Gaia DR3 errors
-    if uncertainty == "future":
-        pmra_err *= 0.15
-        pmdec_err *= 0.15
+    if uncertainty in ('present', 'future'):
+        pmra_err, pmdec_err = proper_motion_uncertainty(G, release='dr3')
+        pmra_err /= 1000
+        pmdec_err /= 1000
+        # Future survey: 15% of present Gaia DR3 errors
+        if uncertainty == "future":
+            pmra_err *= 0.15
+            pmdec_err *= 0.15
+    elif uncertainty == "spec-s5":
+        # read the CSV file
+        table = np.genfromtxt('/mnt/home/tnguyen/projects/stream/sbi_stream/LSST10_DECAM.csv', delimiter=',')
+        interp = interp1d(table[:, 0], table[:, 1], bounds_error=False, fill_value=(table[0, 1], table[-1, 1]))
+        pmra_err = interp(G)
+        pmdec_err = interp(G)
 
     # Compute RV uncertainties from V-band
-    vr_err = sigma_vr(V)
-
+    if uncertainty in ('present', 'future'):
+        vr_err = sigma_vr(V)
+    elif uncertainty == "spec-s5":
+        table = np.genfromtxt(
+            '/mnt/home/tnguyen/projects/stream/sbi_stream/via_rverr_fehm2_eep500.csv', delimiter=',').T
+        interp = interp1d(table[:, 0], table[:, 1], bounds_error=False, fill_value=(table[0, 1], table[-1, 1]))
+        vr_err = interp(G)
     # Return uncertainties
     return pmra_err, pmdec_err, vr_err
 
