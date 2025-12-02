@@ -7,7 +7,6 @@ from ugali.analysis.imf import imfFactory
 from ugali import isochrone
 from pygaia.errors.astrometric import proper_motion_uncertainty
 
-
 def approximate_arc_length(spline, x_arr):
     y_arr = spline(x_arr)
     p2p = np.sqrt((x_arr[1:] - x_arr[:-1]) ** 2 + (y_arr[1:] - y_arr[:-1]) ** 2)
@@ -216,37 +215,6 @@ def bin_stream_spline(
     feat_count = feat_count[mask]
     return arc_bin_centers, feat_mean, feat_stdv, feat_count
 
-def bin_stream_hilmi24(
-    phi1: np.ndarray, phi2: np.ndarray, feat: np.ndarray,
-    m_coeff: float, b_coeff: float, num_bins: int,
-    phi1_min: float = None, phi1_max: float = None,
-):
-    """ Bin the stream along the phi1 coordinates and compute the mean and stdv
-    of the features in each bin. """
-
-    # divide phi1 and phi2 using the line
-    phi2_line = m_coeff * phi1 + b_coeff
-    above = phi2 > phi2_line
-    below = phi2 <= phi2_line
-
-    phi1_min = phi1_min or phi1.min()
-    phi1_max = phi1_max or phi1.max()
-
-    phi1_bcent_ab, feat_mean_ab, feat_stdv_ab, feat_count_ab = bin_stream(
-        phi1[above], feat[above], num_bins=num_bins,
-        phi1_min=phi1_min, phi1_max=phi1_max
-    )
-    phi1_bcent_bl, feat_mean_bl, feat_stdv_bl, feat_count_bl = bin_stream(
-        phi1[below], feat[below], num_bins=num_bins,
-        phi1_min=phi1_min, phi1_max=phi1_max
-    )
-    phi1_bcent = np.concatenate([phi1_bcent_ab, phi1_bcent_bl])
-    feat_mean = np.concatenate([feat_mean_ab, feat_mean_bl])
-    feat_stdv = np.concatenate([feat_stdv_ab, feat_stdv_bl])
-    feat_count = np.concatenate([feat_count_ab, feat_count_bl])
-
-    return phi1_bcent, feat_mean, feat_stdv, feat_count
-
 def compute_V(g: float, r: float) -> float:
     """
     Computes the V-band magnitude from SDSS g and r magnitudes.
@@ -321,16 +289,14 @@ def simulate_uncertainty(num_samples: int, uncertainty: str = "present"):
         Radial velocity uncertainty (km/s).
     """
 
-    if uncertainty not in {"present", "future", "spec-s5"}:
-        raise ValueError(f"Invalid uncertainty type: {uncertainty}. Must be 'present', 'future', or 'spec-s5'.")
+    if uncertainty not in {"present", "future"}:
+        raise ValueError(f"Invalid uncertainty type: {uncertainty}. Must be 'present' or 'future'")
 
     # Set magnitude cuts for present/future scenarios
     if uncertainty == "future":
         mag_r_min, mag_r_max = 14.8, 21.0
     elif uncertainty == "present":
         mag_r_min, mag_r_max = 14.8, 19.8
-    elif uncertainty == "spec-s5":
-        mag_r_min, mag_r_max = 17.0, 23.0
 
     # Choose Chabrier IMF and generate isochrone
     imf_chabrier = imfFactory('Chabrier2003')
@@ -381,7 +347,7 @@ def simulate_uncertainty(num_samples: int, uncertainty: str = "present"):
             pmdec_err *= 0.15
     elif uncertainty == "spec-s5":
         # read the CSV file
-        table = np.genfromtxt('/mnt/home/tnguyen/projects/stream/sbi_stream/LSST10_DECAM.csv', delimiter=',')
+        table = np.genfromtxt('/global/homes/t/tvnguyen/sbi_stream/LSST10_DECAM.csv', delimiter=',')
         interp = interp1d(table[:, 0], table[:, 1], bounds_error=False, fill_value=(table[0, 1], table[-1, 1]))
         pmra_err = interp(G)
         pmdec_err = interp(G)
@@ -391,7 +357,7 @@ def simulate_uncertainty(num_samples: int, uncertainty: str = "present"):
         vr_err = sigma_vr(V)
     elif uncertainty == "spec-s5":
         table = np.genfromtxt(
-            '/mnt/home/tnguyen/projects/stream/sbi_stream/via_rverr_fehm2_eep500.csv', delimiter=',').T
+            '/global/homes/t/tvnguyen/sbi_stream/via_rverr_fehm2_eep500.csv', delimiter=',').T
         interp = interp1d(table[:, 0], table[:, 1], bounds_error=False, fill_value=(table[0, 1], table[-1, 1]))
         vr_err = interp(G)
     # Return uncertainties
