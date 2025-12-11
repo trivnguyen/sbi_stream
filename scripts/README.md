@@ -1,6 +1,6 @@
 # Training Scripts
 
-Canonical training and inference scripts for JGNN.
+Canonical training and inference scripts for sbi_stream.
 
 ## Scripts
 
@@ -15,7 +15,7 @@ Canonical training and inference scripts for JGNN.
 ## Usage
 
 ```bash
-# Install jgnn in editable mode
+# Install sbi_stream in editable mode
 pip install -e .
 
 # Run with example config

@@ -47,10 +47,10 @@ from optuna.integration import PyTorchLightningPruningCallback
 from absl import flags
 from ml_collections import config_flags
 
-from jgnn import datasets
-from jgnn.models import NPE
-from jgnn.transforms import build_transformation
-from jgnn.callbacks.visualization import NPEVisualizationCallback
+from sbi_stream import datasets
+from sbi_stream.models import NPE
+from sbi_stream.transforms import build_transformation
+from sbi_stream.callbacks.visualization import NPEVisualizationCallback
 from train_npe import (
     setup_workdir,
     load_embedding_network,
@@ -284,7 +284,7 @@ def objective(trial: optuna.Trial, base_config: ml_collections.ConfigDict) -> fl
     # Setup wandb logger for this trial
     wandb_mode = 'disabled' if config.get('debug', False) else 'online'
     wandb_logger = WandbLogger(
-        project=config.get("wandb_project", "jgnn-npe-optuna"),
+        project=config.get("wandb_project", "sbi-stream-npe-optuna"),
         name=f"{config.get('name', 'optuna')}_trial_{trial.number}",
         save_dir=str(trial_workdir),
         log_model=False,  # Don't log all models to wandb during optuna

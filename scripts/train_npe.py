@@ -2,7 +2,6 @@
 
 import os
 import sys
-import shutil
 from pathlib import Path
 
 import warnings
@@ -21,10 +20,10 @@ import torch
 from absl import flags
 from ml_collections import config_flags
 
-from jgnn import datasets
-from jgnn.models import NPE, GNNEmbedding, TransformerEmbedding
-from jgnn.transforms import build_transformation
-from jgnn.callbacks.visualization import NPEVisualizationCallback
+from sbi_stream import datasets
+from sbi_stream.models import NPE, GNNEmbedding, TransformerEmbedding
+from sbi_stream.transforms import build_transformation
+from sbi_stream.callbacks.visualization import NPEVisualizationCallback
 
 
 def setup_workdir(workdir: str) -> Path:
@@ -165,7 +164,7 @@ def prepare_data(config: ml_collections.ConfigDict, embedding_norm_dict=None):
         num_workers=config.num_workers,
         num_subsamples=config.data.get('num_subsamples', 1),
         norm_dict=norm_dict,
-        seed=data_seed,
+        seed=config.get('seed_data', 0),
     )
     return train_loader, val_loader, norm_dict
 

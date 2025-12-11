@@ -162,8 +162,7 @@ class TransformerA(nn.Module):
 
 
 class TransformerB(nn.Module):
-    """Decoder-only Transformer. This is an alternative Transformer model, copied
-    from https://github.com/trivnguyen/jgnn.
+    """Decoder-only Transformer. This is an alternative Transformer model.
 
     Parameters
     ----------

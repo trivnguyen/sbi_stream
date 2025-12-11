@@ -1,8 +1,7 @@
-"""Training script for Neural Posterior Estimation (NPE)."""
+"""Training script for Neural Ratio Estimation (NRE)."""
 
 import os
 import sys
-import shutil
 from pathlib import Path
 
 import warnings
@@ -21,10 +20,10 @@ import torch
 from absl import flags
 from ml_collections import config_flags
 
-from jgnn import datasets
-from jgnn.models import NRE, GNNEmbedding, TransformerEmbedding
-from jgnn.transforms import build_transformation
-from jgnn.callbacks.visualization import NPEVisualizationCallback
+from sbi_stream import datasets
+from sbi_stream.models import NRE, GNNEmbedding, TransformerEmbedding
+from sbi_stream.transforms import build_transformation
+from sbi_stream.callbacks.visualization import NPEVisualizationCallback
 
 
 def setup_workdir(workdir: str) -> Path:
@@ -201,16 +200,16 @@ def create_model(
     config: ml_collections.ConfigDict,
     pre_transforms,
     norm_dict
-) -> NPE:
-    """Create the NPE model with optional pre-trained embedding network.
+) -> NRE:
+    """Create the NRE model with optional pre-trained embedding network.
 
     Args:
         config: Configuration dictionary
-        pre_transforms: Pre-transformation pipeline (passed to NPE)
-        norm_dict: Normalization dictionary to pass to NPE
+        pre_transforms: Pre-transformation pipeline (passed to NRE)
+        norm_dict: Normalization dictionary to pass to NRE
 
     Returns:
-        NPE model instance
+        NRE model instance
     """
     # Check if we should load a pre-trained embedding network
     embedding_checkpoint = config.model.embedding.get('checkpoint', None)
@@ -228,17 +227,14 @@ def create_model(
         print("[Model] Creating new embedding network...")
         embedding_nn = create_embedding_network(config)
 
-    # Create NPE model
-    # Note: pre_transforms goes to NPE, not embedding_nn
-    print("[Model] Creating NPE model...")
-
-    # Check if we should initialize flows from embedding
-    init_flows_from_embedding = config.model.get('init_flows_from_embedding', False)
+    # Create NRE model
+    # Note: pre_transforms goes to NRE, not embedding_nn
+    print("[Model] Creating NRE model...")
 
     model = NRE(
         input_size=config.model.input_size,
         output_size=config.model.output_size,
-        classifier_hidden=config.mode.classifier_hidden,
+        classifier_hidden=config.model.classifier_hidden,
         embedding_nn=embedding_nn,
         optimizer_args=config.optimizer,
         scheduler_args=config.scheduler,
@@ -315,7 +311,7 @@ def main(config: ml_collections.ConfigDict, workdir: str = "./logging/"):
     tags = config.get('tags', [])
     tags.append('nre')
     wandb_logger = WandbLogger(
-        project=config.get("wandb_project", "jgnn-npe"),
+        project=config.get("wandb_project", "sbi-stream-nre"),
         name=config.get("name"),
         id=config.get("id", None),
         save_dir=str(run_dir),
@@ -340,13 +336,13 @@ def main(config: ml_collections.ConfigDict, workdir: str = "./logging/"):
     train_loader, val_loader, norm_dict = prepare_data(config, embedding_norm_dict)
     print(f"[Data] Train batches: {len(train_loader)}, Val batches: {len(val_loader)}")
 
-    # Build pre-transforms (will be passed to NPE, not embedding_nn)
+    # Build pre-transforms (will be passed to NRE, not embedding_nn)
     print("[Transforms] Building pre-transforms...")
     pre_transforms = build_transformation(
         norm_dict=norm_dict, **config.pre_transforms)
 
     # Create model
-    print("[Model] Creating NPE model...")
+    print("[Model] Creating NRE model...")
     model = create_model(config, pre_transforms, norm_dict)
 
     # Print trainable vs frozen parameters

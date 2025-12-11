@@ -2,7 +2,6 @@
 
 import os
 import sys
-import shutil
 from pathlib import Path
 
 import warnings
@@ -21,9 +20,9 @@ import torch
 from absl import flags
 from ml_collections import config_flags
 
-from jgnn import datasets
-from jgnn.models import GNNEmbedding, TransformerEmbedding
-from jgnn.transforms import build_transformation
+from sbi_stream import datasets
+from sbi_stream.models import GNNEmbedding, TransformerEmbedding
+from sbi_stream.transforms import build_transformation
 
 
 def setup_workdir(workdir: str) -> Path:
@@ -101,7 +100,7 @@ def prepare_data(config: ml_collections.ConfigDict):
         eval_batch_size=config.eval_batch_size,
         num_workers=config.num_workers,
         num_subsamples=config.data.get('num_subsamples', 1),
-        seed=data_seed,
+        seed=config.get('seed_data', 0),
     )
     return train_loader, val_loader, norm_dict
 
@@ -212,7 +211,7 @@ def main(config: ml_collections.ConfigDict, workdir: str = "./logging/"):
     tags = config.get('tags', [])
     tags.append('embedding')
     wandb_logger = WandbLogger(
-        project=config.get("wandb_project", "jgnn-npe"),
+        project=config.get("wandb_project", "sbi-stream-embedding"),
         name=config.get("name"),
         id=config.get("id", None),
         save_dir=str(run_dir),

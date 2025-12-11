@@ -1,8 +1,7 @@
 
 import os
 import pickle
-
-import shutil
+import sys
 import yaml
 from tqdm import tqdm
 
@@ -10,7 +9,7 @@ import numpy as np
 from absl import flags, logging
 from ml_collections import ConfigDict, config_flags
 
-import datasets
+from sbi_stream import datasets
 
 
 def preprocess(config: ConfigDict):

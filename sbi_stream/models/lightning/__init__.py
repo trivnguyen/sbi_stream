@@ -1,4 +1,4 @@
-"""PyTorch Lightning modules for Jeans GNN."""
+"""PyTorch Lightning modules for sbi_stream."""
 
 from .gnn_embedding import GNNEmbedding
 from .transformer_embedding import TransformerEmbedding
