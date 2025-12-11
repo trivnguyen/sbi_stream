@@ -6,7 +6,7 @@ import torch
 import torch.nn as nn
 import pytorch_lightning as pl
 
-from ..layers import Transformer, MLP
+from ..layers import TransformerA, TransformerB, MLP
 from ..utils import get_activation, configure_optimizers
 from ..utils import build_embedding_loss
 
@@ -77,7 +77,13 @@ class TransformerEmbedding(pl.LightningModule):
     def _setup_model(self):
         """Initialize Transformer, MLP, and loss function."""
         # Create Transformer
-        self.transformer = Transformer(**self.transformer_args)
+        transformer_type = self.transformer_args.pop('type', 'A')
+        if transformer_type == 'A':
+            self.transformer = TransformerA(**self.transformer_args)
+        elif transformer_type == 'B':
+            self.transformer = TransformerB(**self.transformer_args)
+        else:
+            raise ValueError(f"Unknown transformer type: {transformer_type}")
 
         # Create MLP
         if self.mlp_args is not None:
