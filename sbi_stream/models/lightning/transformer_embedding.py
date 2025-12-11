@@ -276,3 +276,68 @@ class TransformerEmbedding(pl.LightningModule):
         return configure_optimizers(
             self.parameters(), self.optimizer_args, self.scheduler_args
         )
+
+
+class TransformerEmbedding(nn.Module):
+    """ Transformer + MLP embedding model """
+
+    def __init__(
+        self, transformer_args: Dict, mlp_args: Dict):
+        """
+        Parameters
+        ----------
+        transformer_args : dict
+            The arguments for the Transformer model.
+        mlp_args : dict
+            The arguments for the MLP model.
+        """
+        super().__init__()
+        self.transformer_args = transformer_args
+        self.mlp_args = mlp_args
+        self.transformer = Transformer(
+            feat_input_size=transformer_args['feat_input_size'],
+            pos_input_size=transformer_args['pos_input_size'],
+            feat_embed_size=transformer_args.get('feat_embed_size', 32),
+            pos_embed_size=transformer_args.get('pos_embed_size', 32),
+            nhead=transformer_args.get('nhead', 4),
+            num_encoder_layers=transformer_args.get('num_encoder_layers', 4),
+            dim_feedforward=transformer_args.get('dim_feedforward', 128),
+            sum_features=transformer_args.get('sum_features', False),
+            activation_name=transformer_args.get('activation_name', 'ReLU'),
+            activation_args=transformer_args.get('activation_args', None),
+        )
+        self.mlp = mlp.MLPBatchNorm(
+            input_size=self.transformer.d_model,
+            output_size=mlp_args['output_size'],
+            hidden_sizes=mlp_args.get('hidden_sizes', []),
+            activation_fn=utils.get_activation(
+                mlp_args.get('activation_name', 'relu'),
+                mlp_args.get('activation_args', {})
+            ),
+            batch_norm=mlp_args.get('batch_norm', False),
+            dropout=mlp_args.get('dropout', 0.0)
+        )
+
+    def forward(self, batch_dict):
+        """
+        Run a forward pass through the model's transformer backbone followed by the MLP head.
+
+        Parameters
+        ----------
+        batch_dict : dict
+            A dictionary containing the inputs required for the forward pass:
+            - 'x' (torch.Tensor): Input feature tensor, typically shaped (batch_size, seq_len, feature_dim).
+            - 't' (torch.Tensor): Positional encodings or time indices; shape must be compatible with the transformer's positional input.
+            - 'padding_mask' (Optional[torch.Tensor]): Optional boolean or byte mask of shape (batch_size, seq_len) indicating padding positions to be ignored by the transformer. If omitted or None, no padding is applied.
+
+        Returns
+        -------
+        torch.Tensor
+            The output embeddings of shape (batch_size, output_size)
+        """
+        x = batch_dict['x']
+        t = batch_dict['t']
+        padding_mask = batch_dict.get('padding_mask', None)
+        x = self.transformer(x, t, padding_mask)
+        x = self.mlp(x)
+        return x
