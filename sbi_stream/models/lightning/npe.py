@@ -157,7 +157,7 @@ class NPE(pl.LightningModule):
         embedding = self.forward(batch)
 
         # Compute loss
-        log_prob = self.log_prob(embedding, batch.theta)
+        log_prob = self.log_prob(embedding, batch.y)
         loss = -log_prob.mean()
 
         # Log metrics
@@ -188,7 +188,7 @@ class NPE(pl.LightningModule):
         embedding = self.forward(batch)
 
         # Compute loss
-        log_prob = self.log_prob(embedding, batch.theta)
+        log_prob = self.log_prob(embedding, batch.y)
         loss = -log_prob.mean()
 
         # Log metrics

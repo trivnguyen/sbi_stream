@@ -155,9 +155,9 @@ class GNNEmbedding(pl.LightningModule):
         # Default implementation for PyG Data objects
         batch_dict = {
             'x': batch.x,
+            'target': batch.y,
             'edge_index': batch.edge_index,
             'batch': batch.batch,
-            'target': batch.theta,
             'edge_attr': batch.edge_attr if hasattr(batch, 'edge_attr') else None,
             'edge_weight': batch.edge_weight if hasattr(batch, 'edge_weight') else None,
             'cond': batch.cond if hasattr(batch, 'cond') else None,

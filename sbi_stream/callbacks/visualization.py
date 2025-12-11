@@ -80,7 +80,7 @@ class NPEVisualizationCallback(pl.Callback):
             return
 
         # Extract true parameters
-        all_true = torch.cat([b.theta for b in all_batches], dim=0)[:self.n_val_samples]
+        all_true = torch.cat([b.y for b in all_batches], dim=0)[:self.n_val_samples]
 
         # Sample from posterior
         pl_module.eval()

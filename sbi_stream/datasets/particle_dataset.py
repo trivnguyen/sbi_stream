@@ -12,7 +12,7 @@ from torch_geometric.loader import DataLoader
 from torch_geometric import transforms as T
 from tqdm import tqdm
 
-from datasets import io_utils, preprocess_utils
+from . import io_utils, preprocess_utils
 
 
 def read_raw_particle_datasets(
