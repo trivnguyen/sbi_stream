@@ -11,24 +11,25 @@ def get_config():
     config.seed_training = 24
 
     # data configuration
-    config.data_root = '/mnt/ceph/users/tnguyen/jeans_gnn/datasets/processed_datasets/'
-    config.data_name = 'gnfw_profiles/gnfw_beta_priorlarge_pois100'
-    config.num_datasets = 1
-    config.labels = (
-        'dm_gamma', 'dm_log_r_dm', 'dm_log_rho_0',
-        'df_beta0', 'df_log_r_a',
-    )
+    config.data = ConfigDict()
+    config.data.data_type = 'preprocessed'
+    config.data.root = '/mnt/ceph/users/tnguyen/stream/preprocessed_datasets/particles/'
+    config.data.name = 'present-6D-sf5'
+    config.data.features = ['phi1', 'phi2', 'pm1', 'pm2', 'vr', 'dist']
+    config.data.labels = ['log_M_sat', 'log_rs_sat', 'vz', 'vphi', 'r', 'phi']
+    config.data.num_datasets = 1
+    config.data.start_dataset = 0
+    config.data.num_subsamples = 5
     config.train_frac = 0.8
     config.num_workers = 0
 
     ## LOGGING AND WANDB CONFIGURATION ###
-    config.workdir = '/mnt/ceph/users/tnguyen/jeans_gnn/trained_models-v2'
-    config.name = 'example_npe_run'
-    config.debug = False
-    config.wandb_project = 'jgnn_v2.0_test'
+    config.workdir = './example'
+    config.wandb_project = 'sbi_stream_example_pretrained_embed'
+    config.tags = ['npe', 'pretrained_embedding', 'debug']
+    config.debug = True
     config.checkpoint = None  # Path to NPE checkpoint for resuming
-    config.reset = True
-    config.reset_optimizer = True
+    config.reset_optimizer = False
     config.enable_progress_bar = True
     config.log_model = 'all'  # Log model checkpoints to WandB
 
@@ -43,7 +44,7 @@ def get_config():
 
     # Embedding network configuration
     # Set to checkpoint path to load pre-trained embedding, or None to train from scratch
-    model.embedding_checkpoint = '/mnt/ceph/users/tnguyen/jeans_gnn/trained_models-v2/example_embed_run/jgnn_v2.0_test/qd784qo5/checkpoints/last.ckpt'
+    model.embedding_checkpoint = 'example.ckpt'
     model.freeze_embedding = True
 
     # NPE Normalizing Flows configuration
@@ -57,16 +58,7 @@ def get_config():
     # Pre-transformation configuration
     # Note: For NPE, pre_transforms are passed to NPE, not to embedding_nn
     config.pre_transforms = pre_transforms = ConfigDict()
-    pre_transforms.apply_projection = True
-    pre_transforms.apply_selection = False
-    pre_transforms.apply_uncertainty = True
-    pre_transforms.use_log_features = True
-    pre_transforms.uncertainty_args = {
-        'distribution_type': 'jeffreys',
-        'low': 0.01,
-        'high': 20.0,
-        'feature_idx': 1
-    }
+    pre_transforms.apply_graph = True
     pre_transforms.graph_name = 'KNN'
     pre_transforms.graph_args = {'k': 20, 'loop': True}
 

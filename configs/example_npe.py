@@ -26,9 +26,10 @@ def get_config():
     ## LOGGING AND WANDB CONFIGURATION ###
     config.workdir = './example'
     config.wandb_project = 'sbi_stream_example'
+    config.tags = ['npe', 'debug']
     config.debug = True
     config.checkpoint = None  # Path to NPE checkpoint for resuming
-    config.reset_optimizer = True
+    config.reset_optimizer = False
     config.enable_progress_bar = True
     config.log_model = 'all'  # Log model checkpoints to WandB
 
@@ -77,17 +78,6 @@ def get_config():
     # Note: For NPE, pre_transforms are passed to NPE, not to embedding_nn
     config.pre_transforms = pre_transforms = ConfigDict()
     pre_transforms.apply_graph = True
-    pre_transforms.apply_projection = False
-    pre_transforms.apply_selection = False
-    pre_transforms.apply_uncertainty = False
-    pre_transforms.use_log_features = False
-    pre_transforms.projection_args = {'axis': 2}
-    pre_transforms.uncertainty_args = {
-        'distribution_type': 'jeffreys',
-        'low': 0.01,
-        'high': 20.0,
-        'feature_idx': 1
-    }
     pre_transforms.graph_name = 'KNN'
     pre_transforms.graph_args = {'k': 20, 'loop': True}
 
