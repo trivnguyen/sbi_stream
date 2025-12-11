@@ -13,8 +13,8 @@ def get_config():
     # data configuration
     config.data = ConfigDict()
     config.data.data_type = 'preprocessed'
-    config.data.root = '/mnt/ceph/users/tnguyen/stream/preprocessed_datasets/particles/'
-    config.data.name = 'present-6D-sf5'
+    config.data.root = '/pscratch/sd/t/tvnguyen/stream_sbi_shared/graph_npe/datasets/'
+    config.data.name = 'present-6D'
     config.data.features = ['phi1', 'phi2', 'pm1', 'pm2', 'vr', 'dist']
     config.data.labels = ['log_M_sat', 'log_rs_sat', 'vz', 'vphi', 'r', 'phi']
     config.data.num_datasets = 1
@@ -24,7 +24,7 @@ def get_config():
     config.num_workers = 0
 
     ## LOGGING AND WANDB CONFIGURATION ###
-    config.workdir = './example'
+    config.workdir = '/pscratch/sd/t/tvnguyen/stream_sbi_shared/graph_npe'
     config.wandb_project = 'sbi_stream_example'
     config.tags = ['npe', 'debug']
     config.debug = True
@@ -94,16 +94,17 @@ def get_config():
     ### OPTIMIZER AND SCHEDULER CONFIGURATION ###
     config.optimizer = optimizer = ConfigDict()
     optimizer.name = "AdamW"
-    optimizer.lr = 1e-4
+    optimizer.lr = 5e-4
     optimizer.betas = [0.9, 0.999]
     optimizer.weight_decay = 0.01
 
     config.scheduler = scheduler = ConfigDict()
-    scheduler.name = "WarmUpCosineAnnealingLR"
-    scheduler.decay_steps = 10_000
-    scheduler.warmup_steps = int(0.05 * scheduler.decay_steps)
-    scheduler.eta_min = 1e-6
-    scheduler.interval = 'step'
+    scheduler.name = None
+    # scheduler.name = "WarmUpCosineAnnealingLR"
+    # scheduler.decay_steps = 10_000
+    # scheduler.warmup_steps = int(0.05 * scheduler.decay_steps)
+    # scheduler.eta_min = 1e-6
+    # scheduler.interval = 'step'
 
     ### TRAINING CONFIGURATION ###
     config.accelerator = 'gpu'
