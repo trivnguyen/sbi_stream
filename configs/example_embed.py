@@ -7,43 +7,46 @@ def get_config():
     config = ConfigDict()
 
     # seeding
-    config.seed_data = 1923871
-    config.seed_training = 19318
+    config.seed_data = 42
+    config.seed_training = 24
 
     # data configuration
-    config.data_root = '/mnt/ceph/users/tnguyen/jeans_gnn/datasets/processed_datasets/'
-    config.data_name = 'gnfw_profiles/gnfw_beta_priorlarge_pois100'
-    config.num_datasets = 1
-    config.labels = (
-        'dm_gamma', 'dm_log_r_dm', 'dm_log_rho_0',
-        'df_beta0', 'df_log_r_a',
-    )
+    config.data = ConfigDict()
+    config.data.data_type = 'preprocessed'
+    config.data.root = '/mnt/ceph/users/tnguyen/stream/preprocessed_datasets/particles/'
+    config.data.name = 'present-6D-sf5'
+    config.data.features = ['phi1', 'phi2', 'pm1', 'pm2', 'vr', 'dist']
+    config.data.labels = ['log_M_sat', 'log_rs_sat', 'vz', 'vphi', 'r', 'phi']
+    config.data.num_datasets = 1
+    config.data.start_dataset = 0
+    config.data.num_subsamples = 5
     config.train_frac = 0.8
     config.num_workers = 0
 
     ## LOGGING AND WANDB CONFIGURATION ###
-    config.workdir = '/mnt/ceph/users/tnguyen/jeans_gnn/trained_models-v2'
-    config.name = 'example_embed_run'
-    config.debug = False
-    config.wandb_project = 'jgnn_v2.0_test'
+    config.workdir = './example'
+    config.wandb_project = 'sbi_stream_example_pretrained_embed'
+    config.tags = ['embedding', 'debug', 'vmim_loss']
+    config.debug = True
     config.checkpoint = None
-    config.reset = True
-    config.reset_optimizer = True
+    config.reset_optimizer = False
     config.enable_progress_bar = True
     config.log_model = 'all'  # Log model checkpoints to WandB
 
+
     ### MODEL CONFIGURATION ###
     config.model = model = ConfigDict()
-    model.input_size = 3
+    model.input_size = len(config.data.features)
+    model.type = 'gnn'  # choices: 'gnn', 'transformer'
 
     # GNN configuration
     model.gnn = ConfigDict()
     model.gnn.projection_size = 32
     model.gnn.hidden_sizes = [64, ] * 3
-    model.gnn.graph_layer = 'GATConv'
+    model.gnn.graph_layer = 'ChebConv'
     model.gnn.graph_layer_params = ConfigDict()
-    model.gnn.graph_layer_params.heads = 2
-    model.gnn.graph_layer_params.concat = False
+    model.gnn.graph_layer_params.sym = True
+    model.gnn.graph_layer_params.K = 4
     model.gnn.pooling = 'mean'
     model.gnn.layer_norm = True
     model.gnn.norm_first = False
@@ -59,20 +62,10 @@ def get_config():
     model.mlp.act_name = 'leaky_relu'
     model.mlp.act_args = {'negative_slope': 0.01}
 
-    # Conditional MLP
-    model.conditional_mlp = ConfigDict()
-    model.conditional_mlp.input_size = 1
-    model.conditional_mlp.hidden_sizes = [16, ] * 3
-    model.conditional_mlp.output_size = 5
-    model.conditional_mlp.dropout = 0.0
-    model.conditional_mlp.batch_norm = True
-    model.conditional_mlp.act_name = 'leaky_relu'
-    model.conditional_mlp.act_args = {'negative_slope': 0.01}
-
     # Loss configuration
-    model.loss_type = 'vmim'
+    model.loss_type = 'vmim'  # choices: 'mse', 'vmim' (mse has no args)
     model.loss_args = ConfigDict()
-    model.loss_args.features = 5
+    model.loss_args.features = len(config.data.labels)
     model.loss_args.context_features = 5
     model.loss_args.num_transforms = 6
     model.loss_args.hidden_features = [64, 64]
@@ -82,16 +75,7 @@ def get_config():
     # Pre-transformation configuration
     # this is the transformation that is applied to the data before forward pass
     config.pre_transforms = pre_transforms = ConfigDict()
-    pre_transforms.apply_projection = True
-    pre_transforms.apply_selection = False
-    pre_transforms.apply_uncertainty = True
-    pre_transforms.use_log_features = True
-    pre_transforms.uncertainty_args = {
-        'distribution_type': 'jeffreys',
-        'low': 0.01,
-        'high': 20.0,
-        'feature_idx': 1
-    }
+    pre_transforms.apply_graph = True
     pre_transforms.graph_name = 'KNN'
     pre_transforms.graph_args = {'k': 20, 'loop': True}
 
