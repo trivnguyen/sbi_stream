@@ -8,6 +8,19 @@ from ugali import isochrone
 from pygaia.errors.astrometric import proper_motion_uncertainty
 
 
+def calculate_derived_properties(table):
+    ''' Calculate derived properties that are not stored in the dataset '''
+    table['log_M_sat'] = np.log10(table['M_sat'])
+    table['log_rs_sat'] = np.log10(table['rs_sat'])
+    table['sin_phi'] = np.sin(table['phi'] / 360 * 2 * np.pi)
+    table['cos_phi'] = np.cos(table['phi'] / 360 * 2 * np.pi)
+    table['r_sin_phi'] = table['r'] * table['sin_phi']
+    table['r_cos_phi'] = table['r'] * table['cos_phi']
+    table['vz_abs'] = np.abs(table['vz'])
+    table['vphi_abs'] = np.abs(table['vphi'])
+    table['vtotal'] = np.sqrt(table['vphi']**2 + table['vz']**2)
+    return table
+
 def approximate_arc_length(spline, x_arr):
     y_arr = spline(x_arr)
     p2p = np.sqrt((x_arr[1:] - x_arr[:-1]) ** 2 + (y_arr[1:] - y_arr[:-1]) ** 2)
@@ -104,14 +117,13 @@ def pad_and_create_mask(features, max_len=None):
         padded_features[i, :f.shape[0]] = f
     return padded_features, mask
 
-def subsample_arrays(arrays: list, subsample_factor: int, unpack=False):
+def subsample_arrays(arrays: list, num_per_subsample: int):
     """ Subsample all arrays in the list. Assuming the arrays have the same length """
     num_sample = len(arrays[0])
-    num_subsample = int(np.ceil(num_sample / subsample_factor))
-    idx = np.random.choice(num_sample, num_subsample, replace=False)
+    if num_per_subsample >= num_sample:
+        return arrays
+    idx = np.random.choice(num_sample, num_per_subsample, replace=False)
     arrays = [arr[idx] for arr in arrays]
-    # if unpack:
-        # return (*arrays,)
     return arrays
 
 def bin_stream(
@@ -149,7 +161,7 @@ def bin_stream(
 
 
 def bin_stream_spline(
-    phi1: np.ndarray, phi2: np.ndarray, feat: np.ndarray, num_bins=int,
+    phi1: np.ndarray, phi2: np.ndarray, feat: np.ndarray, num_bins: int,
     num_knots: int = None, phi1_min: float = None, phi1_max: float = None,
     phi2_min: float = None, phi2_max: float = None
 ):
@@ -216,37 +228,6 @@ def bin_stream_spline(
     feat_count = feat_count[mask]
     return arc_bin_centers, feat_mean, feat_stdv, feat_count
 
-def bin_stream_hilmi24(
-    phi1: np.ndarray, phi2: np.ndarray, feat: np.ndarray,
-    m_coeff: float, b_coeff: float, num_bins: int,
-    phi1_min: float = None, phi1_max: float = None,
-):
-    """ Bin the stream along the phi1 coordinates and compute the mean and stdv
-    of the features in each bin. """
-
-    # divide phi1 and phi2 using the line
-    phi2_line = m_coeff * phi1 + b_coeff
-    above = phi2 > phi2_line
-    below = phi2 <= phi2_line
-
-    phi1_min = phi1_min or phi1.min()
-    phi1_max = phi1_max or phi1.max()
-
-    phi1_bcent_ab, feat_mean_ab, feat_stdv_ab, feat_count_ab = bin_stream(
-        phi1[above], feat[above], num_bins=num_bins,
-        phi1_min=phi1_min, phi1_max=phi1_max
-    )
-    phi1_bcent_bl, feat_mean_bl, feat_stdv_bl, feat_count_bl = bin_stream(
-        phi1[below], feat[below], num_bins=num_bins,
-        phi1_min=phi1_min, phi1_max=phi1_max
-    )
-    phi1_bcent = np.concatenate([phi1_bcent_ab, phi1_bcent_bl])
-    feat_mean = np.concatenate([feat_mean_ab, feat_mean_bl])
-    feat_stdv = np.concatenate([feat_stdv_ab, feat_stdv_bl])
-    feat_count = np.concatenate([feat_count_ab, feat_count_bl])
-
-    return phi1_bcent, feat_mean, feat_stdv, feat_count
-
 def compute_V(g: float, r: float) -> float:
     """
     Computes the V-band magnitude from SDSS g and r magnitudes.
@@ -301,7 +282,7 @@ def sigma_vr(V):
     d = 24.28729466
     return a + (b / (1 + np.exp(-c * (V - d))))
 
-def simulate_uncertainty(num_samples: int, uncertainty: str = "present"):
+def simulate_uncertainty(num_samples: int, uncertainty_model: str = "present"):
     """
     Simulate a large population of stellar uncertainties of proper motions
     and radial velocities.
@@ -321,16 +302,15 @@ def simulate_uncertainty(num_samples: int, uncertainty: str = "present"):
         Radial velocity uncertainty (km/s).
     """
 
-    if uncertainty not in {"present", "future", "spec-s5"}:
-        raise ValueError(f"Invalid uncertainty type: {uncertainty}. Must be 'present', 'future', or 'spec-s5'.")
+    if uncertainty_model not in {"present", "future"}:
+        raise ValueError(
+            f"Invalid uncertainty_model type: {uncertainty_model}. Must be 'present' or 'future'")
 
     # Set magnitude cuts for present/future scenarios
-    if uncertainty == "future":
+    if uncertainty_model == "future":
         mag_r_min, mag_r_max = 14.8, 21.0
-    elif uncertainty == "present":
+    elif uncertainty_model == "present":
         mag_r_min, mag_r_max = 14.8, 19.8
-    elif uncertainty == "spec-s5":
-        mag_r_min, mag_r_max = 17.0, 23.0
 
     # Choose Chabrier IMF and generate isochrone
     imf_chabrier = imfFactory('Chabrier2003')
@@ -371,56 +351,37 @@ def simulate_uncertainty(num_samples: int, uncertainty: str = "present"):
     G = compute_G(g, r)
 
     # Compute Gaia DR3 proper motion uncertainties (in microarcsec → convert to mas)
-    if uncertainty in ('present', 'future'):
-        pmra_err, pmdec_err = proper_motion_uncertainty(G, release='dr3')
-        pmra_err /= 1000
-        pmdec_err /= 1000
-        # Future survey: 15% of present Gaia DR3 errors
-        if uncertainty == "future":
-            pmra_err *= 0.15
-            pmdec_err *= 0.15
-    elif uncertainty == "spec-s5":
-        # read the CSV file
-        table = np.genfromtxt('/mnt/home/tnguyen/projects/stream/sbi_stream/LSST10_DECAM.csv', delimiter=',')
-        interp = interp1d(table[:, 0], table[:, 1], bounds_error=False, fill_value=(table[0, 1], table[-1, 1]))
-        pmra_err = interp(G)
-        pmdec_err = interp(G)
+    pmra_err, pmdec_err = proper_motion_uncertainty(G, release='dr3')
+    pmra_err /= 1000
+    pmdec_err /= 1000
+
+    # Future survey: 15% of present Gaia DR3 errors
+    if uncertainty_model == "future":
+        pmra_err *= 0.15
+        pmdec_err *= 0.15
 
     # Compute RV uncertainties from V-band
-    if uncertainty in ('present', 'future'):
-        vr_err = sigma_vr(V)
-    elif uncertainty == "spec-s5":
-        table = np.genfromtxt(
-            '/mnt/home/tnguyen/projects/stream/sbi_stream/via_rverr_fehm2_eep500.csv', delimiter=',').T
-        interp = interp1d(table[:, 0], table[:, 1], bounds_error=False, fill_value=(table[0, 1], table[-1, 1]))
-        vr_err = interp(G)
+    vr_err = sigma_vr(V)
+
     # Return uncertainties
     return pmra_err, pmdec_err, vr_err
 
 def add_uncertainty(
     phi1: np.ndarray, phi2: np.ndarray, feat: np.ndarray,
-    features: list, uncertainty: str = "present"
+    features: list, uncertainty_model: str = "present"
 ):
     """ Add uncertainties to the features: distance, radial velocity,
     proper motions in phi1, and proper motions in phi2.
     """
-
-    # Define the sample size based on the uncertainty type
-    # sample_size = 96 if uncertainty == "present" else 396 if uncertainty == "future"
-
-    # Downsample the arrays to the sample size
-    # indices = np.random.choice(phi1.shape[0], sample_size, replace=False)
-    # phi1, phi2, feat = phi1[indices], phi2[indices], feat[indices, :]
-
     # Compute the uncertainty vector
     num_samples = len(phi1)
 
-    if uncertainty is not None:
+    if uncertainty_model is not None:
         feat_err = {}
 
         # Generate a pool of uncertainties
         pmra_err, pmdec_err, vr_err = simulate_uncertainty(
-            num_samples, uncertainty=uncertainty)
+            num_samples, uncertainty_model=uncertainty_model)
 
         feat_err['pm1'] = np.random.normal(loc=0, scale=pmra_err)
         feat_err['pm2'] = np.random.normal(loc=0, scale=pmdec_err)
