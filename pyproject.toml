@@ -3,9 +3,9 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "jgnn"
+name = "sbi_stream"
 version = "2.0.0"
-description = "Graph Neural Posterior Estimation for dark matter density profiles"
+description = "Simulation-based inference for stellar streams."
 readme = "README.md"
 requires-python = ">=3.8"
 license = {text = "MIT"}
@@ -25,4 +25,4 @@ dependencies = [
 ]
 
 [tool.setuptools]
-packages = ["jgnn"]
+packages = ["sbi_stream"]
