@@ -67,30 +67,42 @@ def prepare_data(config: ml_collections.ConfigDict):
         config: Configuration dictionary
 
     Returns:
-        Tuple of (train_loader, val_loader, pre_transforms)
+        Tuple of (train_loader, val_loader, norm_dict)
     """
-    # Load datasets
-    node_feats, graph_feats = datasets.read_datasets(
-        config.data_root,
-        config.data_name,
-        config.num_datasets,
-        init=config.get('init', 0),
-        concat=True,
-    )
+    # read in the dataset and prepare the data loader for training
+    if config.data.data_type == 'raw':
+        dataset = datasets.read_raw_particle_datasets(
+            os.path.join(config.data.root, config.data.name),
+            features=config.data.features,
+            labels=config.data.labels,
+            num_datasets=config.data.get('num_datasets', 1),
+            init=config.data.get('start_dataset', 0),
+            # preprocessing arguments
+            num_subsamples=config.data.get('num_subsamples', 1),
+            num_per_subsample=config.data.get('num_per_subsample', None),
+            phi1_min=config.data.get('phi1_min', None),
+            phi1_max=config.data.get('phi1_max', None),
+            uncertainty_model=config.data.get('uncertainty_model', None),
+        )
+    elif config.data.data_type == 'preprocessed':
+        dataset = datasets.read_processed_particle_datasets(
+            os.path.join(config.data.root, config.data.name),
+            num_datasets=config.data.get('num_datasets', 1),
+            init=config.data.get('start_dataset', 0),
+        )
+    else:
+        raise ValueError(f"Unknown data_type {config.data.data_type}")
 
-    # Create dataloaders
-    train_loader, val_loader, norm_dict = datasets.prepare_dataloaders(
-        node_feats,
-        graph_feats,
-        config.labels,
-        cond_labels=config.get('cond_labels', None),
+    # Create dataloaders with existing norm_dict
+    train_loader, val_loader, norm_dict = datasets.prepare_particle_dataloader(
+        dataset,
+        train_frac=config.train_frac,
         train_batch_size=config.train_batch_size,
         eval_batch_size=config.eval_batch_size,
-        train_frac=config.train_frac,
         num_workers=config.num_workers,
-        seed=config.seed_data,
+        num_subsamples=config.data.get('num_subsamples', 1),
+        seed=data_seed,
     )
-
     return train_loader, val_loader, norm_dict
 
 
