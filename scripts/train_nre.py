@@ -22,7 +22,7 @@ from absl import flags
 from ml_collections import config_flags
 
 from jgnn import datasets
-from jgnn.models import NPE, GNNEmbedding, TransformerEmbedding
+from jgnn.models import NRE, GNNEmbedding, TransformerEmbedding
 from jgnn.transforms import build_transformation
 from jgnn.callbacks.visualization import NPEVisualizationCallback
 
@@ -235,16 +235,15 @@ def create_model(
     # Check if we should initialize flows from embedding
     init_flows_from_embedding = config.model.get('init_flows_from_embedding', False)
 
-    model = NPE(
+    model = NRE(
         input_size=config.model.input_size,
         output_size=config.model.output_size,
-        flows_args=config.model.flows,
+        classifier_hidden=config.mode.classifier_hidden,
         embedding_nn=embedding_nn,
         optimizer_args=config.optimizer,
         scheduler_args=config.scheduler,
         norm_dict=norm_dict,
         pre_transforms=pre_transforms,
-        init_flows_from_embedding=init_flows_from_embedding,
     )
 
     return model
@@ -286,25 +285,13 @@ def create_callbacks(config: ml_collections.ConfigDict, wandb_logger: WandbLogge
     ]
 
     if config.get('enable_visualization_callback', True):
-        print("[Callbacks] Adding NPE Visualization Callback")
-        callbacks.append(
-            NPEVisualizationCallback(
-                plot_every_n_epochs=config.visualization.get('plot_every_n_epochs', 1),
-                n_posterior_samples=config.visualization.get('n_posterior_samples', 1000),
-                n_val_samples=config.visualization.get('n_val_samples', 100),
-                plot_median_v_true=config.visualization.get('plot_median_v_true', True),
-                plot_tarp=config.visualization.get('plot_tarp', True),
-                plot_rank=config.visualization.get('plot_rank', True),
-                use_default_mplstyle=config.visualization.get('use_default_mplstyle', True),
-            )
-        )
+        print("[Callbacks] Visualization callback enabled, but not implemented for NRE yet.")
 
     return callbacks
 
 
-
 def main(config: ml_collections.ConfigDict, workdir: str = "./logging/"):
-    """Train the NPE model with wandb logging.
+    """Train the NRE model with wandb logging.
 
     Args:
         config: Configuration dictionary containing model and training parameters
@@ -326,7 +313,7 @@ def main(config: ml_collections.ConfigDict, workdir: str = "./logging/"):
     print(f"[WandB] Mode: {wandb_mode}")
 
     tags = config.get('tags', [])
-    tags.append('npe')
+    tags.append('nre')
     wandb_logger = WandbLogger(
         project=config.get("wandb_project", "jgnn-npe"),
         name=config.get("name"),
