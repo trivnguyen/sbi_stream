@@ -2,20 +2,14 @@
 import os
 import pickle
 import sys
-sys.path.append('/global/homes/t/tvnguyen/snpe_stream')
-import shutil
 import yaml
 from tqdm import tqdm
 
 import numpy as np
-import torch
-import pytorch_lightning as pl
-import pytorch_lightning.loggers as pl_loggers
-import matplotlib as mpl
 from absl import flags, logging
 from ml_collections import ConfigDict, config_flags
 
-import datasets
+from sbi_stream import datasets
 
 
 def preprocess(config: ConfigDict):
@@ -34,7 +28,7 @@ def preprocess(config: ConfigDict):
 
     logging.info("Processing raw data from %s", data_raw_dir)
     for i in tqdm(range(config.start_dataset, config.start_dataset + config.num_datasets)):
-        data = datasets.read_raw_datasets(
+        data = datasets.read_raw_particle_datasets(
             data_raw_dir,
             features=config.features,
             labels=config.labels,
