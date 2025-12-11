@@ -156,7 +156,7 @@ def prepare_data(config: ml_collections.ConfigDict, embedding_norm_dict=None):
         norm_dict = None
 
     # Create dataloaders with existing norm_dict
-    train_loader, val_loader, norm_dict = datasets.prepare_particle_dataloader(
+    train_loader, val_loader, norm_dict = datasets.prepare_particle_dataloaders(
         dataset,
         train_frac=config.train_frac,
         train_batch_size=config.train_batch_size,

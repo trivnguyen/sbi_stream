@@ -93,7 +93,7 @@ def prepare_data(config: ml_collections.ConfigDict):
         raise ValueError(f"Unknown data_type {config.data.data_type}")
 
     # Create dataloaders with existing norm_dict
-    train_loader, val_loader, norm_dict = datasets.prepare_particle_dataloader(
+    train_loader, val_loader, norm_dict = datasets.prepare_particle_dataloaders(
         dataset,
         train_frac=config.train_frac,
         train_batch_size=config.train_batch_size,
