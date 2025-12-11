@@ -7,7 +7,6 @@ from typing import List, Union, Optional
 import numpy as np
 import pandas as pd
 import torch
-from absl import logging
 from torch_geometric.data import Data
 from torch_geometric.loader import DataLoader
 from torch_geometric import transforms as T
@@ -21,7 +20,7 @@ def read_raw_particle_datasets(
     features: List[str],
     labels: List[str],
     num_datasets: int = 1,
-    start_dataset: int = 0,
+    init: int = 0,
     num_subsamples: int = 1,
     num_per_subsample: int = None,
     phi1_min: Optional[float] = None,
@@ -41,8 +40,8 @@ def read_raw_particle_datasets(
         List of labels to use for the regression.
     num_datasets : int, optional
         Number of datasets to read in. Default is 1.
-    start_dataset : int, optional
-        Index to start reading the dataset. Default is 0.
+    init : int, optional
+        Initial to start reading the dataset. Default is 0.
     num_subsamples : int, optional
         Number of subsamples to use. Default is 1.
     num_per_subsample : int, optional
@@ -68,7 +67,7 @@ def read_raw_particle_datasets(
 
     graph_list = []
 
-    for i in range(start_dataset, start_dataset + num_datasets):
+    for i in range(init, init + num_datasets):
         label_fn = os.path.join(data_dir, f'labels.{i}.csv')
         data_fn = os.path.join(data_dir, f'data.{i}.hdf5')
 
@@ -113,14 +112,15 @@ def read_raw_particle_datasets(
                 )
                 graph_list.append(graph_data)
 
-    logging.info('Total number of graphs: {}'.format(len(graph_list)))
+    print('Total number of graphs: {}'.format(len(graph_list)))
 
     return graph_list
+
 
 def read_processed_particle_datasets(
     data_dir: Union[str, Path],
     num_datasets: int = 1,
-    start_dataset: int = 0,
+    init: int = 0,
 ):
     """
     Read preprocessed particle-level stream datasets from pickle files as PyTorch Geometric graphs.
@@ -131,7 +131,7 @@ def read_processed_particle_datasets(
         Path to the directory containing the processed data files.
     num_datasets : int, optional
         Number of datasets to read in. Default is 1.
-    start_dataset : int, optional
+    init : int, optional
         Index to start reading the dataset. Default is 0.
 
     Returns
@@ -141,7 +141,7 @@ def read_processed_particle_datasets(
     """
     graph_list = []
 
-    for i in tqdm(range(start_dataset, start_dataset + num_datasets)):
+    for i in tqdm(range(init, init + num_datasets)):
         data_path = os.path.join(data_dir, f'data.{i}.pkl')
         if not os.path.exists(data_path):
             continue
@@ -156,54 +156,12 @@ def read_processed_particle_datasets(
         else:
             graph_list.append(graphs)
 
-    logging.info('Total number of graphs loaded: {}'.format(len(graph_list)))
+    print('Total number of graphs loaded: {}'.format(len(graph_list)))
 
     return graph_list
 
-def read_processed_particle_datasets(
-    data_dir: Union[str, Path],
-    num_datasets: int = 1,
-    start_dataset: int = 0,
-):
-    """
-    Read preprocessed particle-level stream datasets from pickle files as PyTorch Geometric graphs.
 
-    Parameters
-    ----------
-    data_dir : str or Path
-        Path to the directory containing the processed data files.
-    num_datasets : int, optional
-        Number of datasets to read in. Default is 1.
-    start_dataset : int, optional
-        Index to start reading the dataset. Default is 0.
-
-    Returns
-    -------
-    list of Data
-        List of PyTorch Geometric Data objects loaded from pickle files.
-    """
-    graph_list = []
-
-    for i in tqdm(range(start_dataset, start_dataset + num_datasets)):
-        data_path = os.path.join(data_dir, f'data.{i}.pkl')
-        if not os.path.exists(data_path):
-            continue
-
-        with open(data_path, "rb") as f:
-            graphs = pickle.load(f)
-
-        # If the pickle file contains a list of Data objects, extend graph_list
-        # Otherwise, if it's a single Data object, append it
-        if isinstance(graphs, list):
-            graph_list.extend(graphs)
-        else:
-            graph_list.append(graphs)
-
-    logging.info('Total number of graphs loaded: {}'.format(len(graph_list)))
-
-    return graph_list
-
-def prepare_particle_dataloader(
+def prepare_particle_dataloaders(
     data: List[Data],
     norm_dict: dict = None,
     train_frac: float = 0.8,
@@ -245,6 +203,7 @@ def prepare_particle_dataloader(
     num_total = len(data)
 
     # Shuffle and split data accounting for subsamples
+    # TODO: Move this logic into a separate function
     if num_subsamples > 1:
         # Special case if subsampling is enabled
         # This is required to prevent data leakage - keep subsamples from the same stream together
@@ -328,9 +287,57 @@ def prepare_particle_dataloader(
     val_loader = DataLoader(
         val_data,
         batch_size=eval_batch_size,
-        shuffle=False,
+        shuffle=True,   # enable for callbacks, which take random subsets of val
         num_workers=num_workers,
         pin_memory=torch.cuda.is_available()
     )
 
     return train_loader, val_loader, norm_dict
+
+
+def prepare_particle_test_dataloader(
+    data: List[Data],
+    norm_dict: dict,
+    test_batch_size: int = 32,
+    num_workers: int = 0,
+):
+    """
+    Create PyTorch Geometric dataloader for testing of particle-level stream datasets.
+
+    Parameters
+    ----------
+    data : list of Data
+        List of PyTorch Geometric Data objects.
+    norm_dict : dict
+        Dictionary containing normalization parameters.
+        Expected keys: 'x_loc', 'x_scale', 'y_loc', 'y_scale'
+    test_batch_size : int, optional
+        Batch size for testing. Default is 32.
+    num_workers : int, optional
+        Number of workers for data loading. Default is 0.
+
+    Returns
+    -------
+    DataLoader
+        PyTorch Geometric DataLoader for the test dataset.
+    """
+    x_loc = norm_dict["x_loc"]
+    x_scale = norm_dict["x_scale"]
+    y_loc = norm_dict["y_loc"]
+    y_scale = norm_dict["y_scale"]
+
+    # Normalize test data
+    for d in data:
+        d.x = (d.x - x_loc) / x_scale
+        d.y = (d.y - y_loc) / y_scale
+
+    # Create PyTorch Geometric DataLoader
+    test_loader = DataLoader(
+        data,
+        batch_size=test_batch_size,
+        shuffle=False,
+        num_workers=num_workers,
+        pin_memory=torch.cuda.is_available()
+    )
+
+    return test_loader
