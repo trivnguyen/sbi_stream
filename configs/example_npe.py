@@ -24,7 +24,7 @@ def get_config():
     config.num_workers = 0
 
     ## LOGGING AND WANDB CONFIGURATION ###
-    config.workdir = '/pscratch/sd/t/tvnguyen/stream_sbi_shared/graph_npe'
+    config.workdir = './example'
     config.wandb_project = 'sbi_stream_example'
     config.tags = ['npe', 'debug']
     config.entity = 'desc_sbi_stream'
