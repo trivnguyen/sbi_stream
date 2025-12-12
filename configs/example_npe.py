@@ -27,6 +27,7 @@ def get_config():
     config.workdir = '/pscratch/sd/t/tvnguyen/stream_sbi_shared/graph_npe'
     config.wandb_project = 'sbi_stream_example'
     config.tags = ['npe', 'debug']
+    config.entity = 'desc_sbi_stream'
     config.debug = True
     config.checkpoint = None  # Path to NPE checkpoint for resuming
     config.reset_optimizer = False
