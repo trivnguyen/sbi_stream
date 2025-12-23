@@ -402,3 +402,103 @@ def add_uncertainty(
     feat = feat + feat_err
 
     return phi1, phi2, feat, feat_err
+
+def zmag_function(zmag, bright_floor=12.0):
+    """
+    Compute zmag scaling factor for pyGaia-like uncertainty model
+    Bright floor is set to 12.0 by default following pyGaia, but can be adjusted.
+    
+    Parameters:
+    zmag (float or array-like): Magnitude value(s)
+    """
+    z = 10**(0.4 * (zmag - 15.0))
+    z[z < 10**(0.4 * (bright_floor - 15.0))] = 10**(0.4 * (bright_floor - 15.0))
+    return z
+
+
+# In[ ]:
+
+
+def sigma_pmra(zmag):
+    """
+    Computes the proper motion uncertainty in RA (sigma_pmra) for a given magnitude (DES z) 
+    using a PyGaia-like function.
+
+    Parameters:
+    z (float or array-like): Magnitude value(s)
+
+    Returns:
+    float or array-like: Corresponding sigma_pmra values
+    """
+    k_alpha = 0.000868462681306
+
+    z = zmag_function(np.atleast_1d(zmag))
+    sigma = k_alpha * np.sqrt(40 + 800*z + 30*z**2) 
+    return sigma if np.ndim(zmag) > 0 else sigma[0]
+
+
+# In[ ]:
+
+
+def sigma_pmdec(zmag):
+    """
+    Computes the proper motion uncertainty in Dec (sigma_pmdec) for a given magnitude (DES z) 
+    using a PyGaia-like function.
+
+    Parameters:
+    z (float or array-like): Magnitude value(s)
+
+    Returns:
+    float or array-like: Corresponding sigma_pmdec values
+    """
+    k_delta = 0.000891500759622
+
+    z = zmag_function(np.atleast_1d(zmag))
+    sigma = k_delta * np.sqrt(40 + 800*z + 30*z**2)
+    return sigma if np.ndim(zmag) > 0 else sigma[0]
+
+
+# In[ ]:
+
+
+def sigma_rv(zmag):
+    """
+    Computes the radial velocity accuracy (sigma_vr) for a given magnitude (DES z)
+    using the fitted logistic-like function.
+
+    Parameters:
+    z (float or array-like): Magnitude value(s)
+    Returns:
+    float or array-like: Corresponding sigma_vr values
+    """
+    a = 0.383691
+    b = 11.296537
+    c = 0.929316
+    d = 19.026710
+    return a + (b / (1 + np.exp(-c * (zmag - d))))
+
+
+# In[ ]:
+
+
+def simulate_uncertainty_aau(zband):
+    """
+    Simulate a large population of stellar uncertainties of proper motions
+    and radial velocities, based on fits made to the current spectroscopic confirmed AAU member stars.
+
+    Parameters:
+    - zband : float
+        Z-band magnitude to simulate uncertainties, thought to be the best tracer. 
+
+    Returns:
+    - pmra : np.ndarray
+        Proper motion uncertainty in RA (mas/yr).
+    - pmdec : np.ndarray
+        Proper motion uncertainty in Dec (mas/yr).
+    - vr : np.ndarray
+        Radial velocity uncertainty (km/s).
+    """
+
+    pmra_err = sigma_pmra(zband)
+    pmdec_err = sigma_pmdec(zband)
+    rv_err = sigma_rv(zband)
