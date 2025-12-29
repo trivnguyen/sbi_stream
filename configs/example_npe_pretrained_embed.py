@@ -26,6 +26,7 @@ def get_config():
     ## LOGGING AND WANDB CONFIGURATION ###
     config.workdir = './example'
     config.wandb_project = 'sbi_stream_example_pretrained_embed'
+    config.entity = 'desc_sbi_stream'  # wandb team name or personal account
     config.tags = ['npe', 'pretrained_embedding', 'debug']
     config.debug = True
     config.checkpoint = None  # Path to NPE checkpoint for resuming
