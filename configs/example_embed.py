@@ -26,6 +26,7 @@ def get_config():
     ## LOGGING AND WANDB CONFIGURATION ###
     config.workdir = './example'
     config.wandb_project = 'sbi_stream_example_pretrained_embed'
+    config.entity = None # set to your WandB entity name
     config.tags = ['embedding', 'debug', 'vmim_loss']
     config.debug = True
     config.checkpoint = None
