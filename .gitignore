@@ -1,6 +1,4 @@
-slurm
-notebooks
-.gitignore
+workspace
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
