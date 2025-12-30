@@ -282,6 +282,81 @@ def sigma_vr(V):
     d = 24.28729466
     return a + (b / (1 + np.exp(-c * (V - d))))
 
+
+def zmag_function(zmag, bright_floor=12.0):
+    """
+    Compute zmag scaling factor for pyGaia-like uncertainty model
+    Bright floor is set to 12.0 by default following pyGaia, but can be adjusted.
+    
+    Parameters:
+    zmag (float or array-like): Magnitude value(s)
+    """
+    z = 10**(0.4 * (zmag - 15.0))
+    z[z < 10**(0.4 * (bright_floor - 15.0))] = 10**(0.4 * (bright_floor - 15.0))
+    return z
+
+
+# In[ ]:
+
+
+def exp_pmra_err(zmag):
+    """
+    Computes the proper motion uncertainty in RA (sigma_pmra) for a given magnitude (DES z) 
+    using a PyGaia-like function. See: https://github.com/agabrown/PyGaia/blob/master/src/pygaia/errors/utils.py
+
+    Parameters:
+    z (float or array-like): Magnitude value(s)
+
+    Returns:
+    float or array-like: Corresponding sigma_pmra values
+    """
+    k_alpha = 0.000868462681306
+
+    z = zmag_function(np.atleast_1d(zmag))
+    sigma = k_alpha * np.sqrt(40 + 800*z + 30*z**2) 
+    return sigma if np.ndim(zmag) > 0 else sigma[0]
+
+
+# In[ ]:
+
+
+def exp_pmdec_err(zmag):
+    """
+    Computes the proper motion uncertainty in Dec (sigma_pmdec) for a given magnitude (DES z) 
+    using a PyGaia-like function.
+
+    Parameters:
+    z (float or array-like): Magnitude value(s)
+
+    Returns:
+    float or array-like: Corresponding sigma_pmdec values
+    """
+    k_delta = 0.000891500759622
+
+    z = zmag_function(np.atleast_1d(zmag))
+    sigma = k_delta * np.sqrt(40 + 800*z + 30*z**2)
+    return sigma if np.ndim(zmag) > 0 else sigma[0]
+
+
+# In[ ]:
+
+
+def log_rv_err(zmag):
+    """
+    Computes the radial velocity accuracy (sigma_vr) for a given magnitude (DES z)
+    using a fitted logistic-like function.
+
+    Parameters:
+    z (float or array-like): Magnitude value(s)
+    Returns:
+    float or array-like: Corresponding sigma_vr values
+    """
+    a = 0.383691
+    b = 11.296537
+    c = 0.929316
+    d = 19.026710
+    return a + (b / (1 + np.exp(-c * (zmag - d))))
+
 def simulate_uncertainty(num_samples: int, uncertainty_model: str = "present"):
     """
     Simulate a large population of stellar uncertainties of proper motions
@@ -302,66 +377,105 @@ def simulate_uncertainty(num_samples: int, uncertainty_model: str = "present"):
         Radial velocity uncertainty (km/s).
     """
 
-    if uncertainty_model not in {"present", "future"}:
+    if uncertainty_model not in {"present", "future", "aau"}:
         raise ValueError(
             f"Invalid uncertainty_model type: {uncertainty_model}. Must be 'present' or 'future'")
 
     # Set magnitude cuts for present/future scenarios
     if uncertainty_model == "future":
         mag_r_min, mag_r_max = 14.8, 21.0
-    elif uncertainty_model == "present":
+    elif uncertainty_model == "present" or uncertainty_model == "aau":
         mag_r_min, mag_r_max = 14.8, 19.8
 
+    if uncertainty_model in ('future', 'present'):
     # Choose Chabrier IMF and generate isochrone
-    imf_chabrier = imfFactory('Chabrier2003')
-    iso = isochrone.factory(
+        imf_chabrier = imfFactory('Chabrier2003')
+        iso = isochrone.factory(
         name='Dotter',
         age=11.5,  # Gyr
         metallicity=0.00016,  # Typical for old stellar streams
         distance_modulus=16.807,  # Average stream distance modulus
         imf=imf_chabrier,
         survey='des'
-    )
+        )
 
     # Conservative buffer
-    buffer_factor = 2
-    stellar_mass = num_samples * buffer_factor * iso.stellar_mass()
+        buffer_factor = 2
+        stellar_mass = num_samples * buffer_factor * iso.stellar_mass()
 
     # Simulate synthetic stars from the isochrone
-    g, r = [], []
-    num_samples_curr = 0
-    while num_samples_curr < num_samples:
-        mag_g, mag_r = iso.simulate(stellar_mass=stellar_mass)
+        g, r = [], []
+        num_samples_curr = 0
+        while num_samples_curr < num_samples:
+            mag_g, mag_r = iso.simulate(stellar_mass=stellar_mass)
 
         # Filter magnitudes and V-band based on cuts
-        mask = (mag_r >= mag_r_min) & (mag_r <= mag_r_max)
-        g.append(mag_g[mask])
-        r.append(mag_r[mask])
+            mask = (mag_r >= mag_r_min) & (mag_r <= mag_r_max)
+            g.append(mag_g[mask])
+            r.append(mag_r[mask])
 
-        num_samples_curr += np.sum(mask)
-    g = np.concatenate(g)
-    r = np.concatenate(r)
-    g = g[:num_samples]
-    r = r[:num_samples]
+            num_samples_curr += np.sum(mask)
+        g = np.concatenate(g)
+        r = np.concatenate(r)
+        g = g[:num_samples]
+        r = r[:num_samples]
 
     # Compute V-band magnitudes for the synthetic population
-    V = compute_V(g, r)
+        V = compute_V(g, r)
 
     # Compute Gaia G-band magnitudes
-    G = compute_G(g, r)
+        G = compute_G(g, r)
 
     # Compute Gaia DR3 proper motion uncertainties (in microarcsec → convert to mas)
-    pmra_err, pmdec_err = proper_motion_uncertainty(G, release='dr3')
-    pmra_err /= 1000
-    pmdec_err /= 1000
+        pmra_err, pmdec_err = proper_motion_uncertainty(G, release='dr3')
+        pmra_err /= 1000
+        pmdec_err /= 1000
 
     # Future survey: 15% of present Gaia DR3 errors
-    if uncertainty_model == "future":
-        pmra_err *= 0.15
-        pmdec_err *= 0.15
+        if uncertainty_model == "future":
+            pmra_err *= 0.15
+            pmdec_err *= 0.15
 
     # Compute RV uncertainties from V-band
-    vr_err = sigma_vr(V)
+        vr_err = sigma_vr(V)
+    
+    elif uncertainty_model == 'aau':
+
+        imf_chabrier = imfFactory('Chabrier2003')
+        iso = isochrone.factory(
+        name='Dotter',
+        age=11.5,  # Gyr
+        metallicity=0.00016,  # Typical for old stellar streams
+        distance_modulus=16.807,  # Average stream distance modulus
+        imf=imf_chabrier,
+        survey='des', 
+        band_1='r',
+        band_2='z'
+        )
+
+        buffer_factor = 2
+        stellar_mass = num_samples * buffer_factor * iso.stellar_mass()
+
+        # Simulate synthetic stars from the isochrone
+        r, z = [], []
+        num_samples_curr = 0
+        while num_samples_curr < num_samples:
+            mag_r, mag_z = iso.simulate(stellar_mass=stellar_mass)
+
+        # Filter magnitudes and V-band based on cuts
+            mask = (mag_r >= mag_r_min) & (mag_r <= mag_r_max)
+            r.append(mag_r[mask])
+            z.append(mag_z[mask])
+
+            num_samples_curr += np.sum(mask)
+        r = np.concatenate(r)
+        z = np.concatenate(z)
+        r = r[:num_samples]
+        z = z[:num_samples]
+
+        pmra_err = exp_pmra_err(z)
+        pmdec_err = exp_pmdec_err(z)
+        vr_err = log_rv_err(z)
 
     # Return uncertainties
     return pmra_err, pmdec_err, vr_err
@@ -403,102 +517,7 @@ def add_uncertainty(
 
     return phi1, phi2, feat, feat_err
 
-def zmag_function(zmag, bright_floor=12.0):
-    """
-    Compute zmag scaling factor for pyGaia-like uncertainty model
-    Bright floor is set to 12.0 by default following pyGaia, but can be adjusted.
-    
-    Parameters:
-    zmag (float or array-like): Magnitude value(s)
-    """
-    z = 10**(0.4 * (zmag - 15.0))
-    z[z < 10**(0.4 * (bright_floor - 15.0))] = 10**(0.4 * (bright_floor - 15.0))
-    return z
+
 
 
 # In[ ]:
-
-
-def sigma_pmra(zmag):
-    """
-    Computes the proper motion uncertainty in RA (sigma_pmra) for a given magnitude (DES z) 
-    using a PyGaia-like function.
-
-    Parameters:
-    z (float or array-like): Magnitude value(s)
-
-    Returns:
-    float or array-like: Corresponding sigma_pmra values
-    """
-    k_alpha = 0.000868462681306
-
-    z = zmag_function(np.atleast_1d(zmag))
-    sigma = k_alpha * np.sqrt(40 + 800*z + 30*z**2) 
-    return sigma if np.ndim(zmag) > 0 else sigma[0]
-
-
-# In[ ]:
-
-
-def sigma_pmdec(zmag):
-    """
-    Computes the proper motion uncertainty in Dec (sigma_pmdec) for a given magnitude (DES z) 
-    using a PyGaia-like function.
-
-    Parameters:
-    z (float or array-like): Magnitude value(s)
-
-    Returns:
-    float or array-like: Corresponding sigma_pmdec values
-    """
-    k_delta = 0.000891500759622
-
-    z = zmag_function(np.atleast_1d(zmag))
-    sigma = k_delta * np.sqrt(40 + 800*z + 30*z**2)
-    return sigma if np.ndim(zmag) > 0 else sigma[0]
-
-
-# In[ ]:
-
-
-def sigma_rv(zmag):
-    """
-    Computes the radial velocity accuracy (sigma_vr) for a given magnitude (DES z)
-    using the fitted logistic-like function.
-
-    Parameters:
-    z (float or array-like): Magnitude value(s)
-    Returns:
-    float or array-like: Corresponding sigma_vr values
-    """
-    a = 0.383691
-    b = 11.296537
-    c = 0.929316
-    d = 19.026710
-    return a + (b / (1 + np.exp(-c * (zmag - d))))
-
-
-# In[ ]:
-
-
-def simulate_uncertainty_aau(zband):
-    """
-    Simulate a large population of stellar uncertainties of proper motions
-    and radial velocities, based on fits made to the current spectroscopic confirmed AAU member stars.
-
-    Parameters:
-    - zband : float
-        Z-band magnitude to simulate uncertainties, thought to be the best tracer. 
-
-    Returns:
-    - pmra : np.ndarray
-        Proper motion uncertainty in RA (mas/yr).
-    - pmdec : np.ndarray
-        Proper motion uncertainty in Dec (mas/yr).
-    - vr : np.ndarray
-        Radial velocity uncertainty (km/s).
-    """
-
-    pmra_err = sigma_pmra(zband)
-    pmdec_err = sigma_pmdec(zband)
-    rv_err = sigma_rv(zband)
