@@ -283,18 +283,24 @@ def sigma_vr(V):
     return a + (b / (1 + np.exp(-c * (V - d))))
 
 
-def zmag_function(zmag, bright_floor=12.0):
+def zmag_to_scaling(zmag, bright_floor=12.0):
     """
-    Compute zmag scaling factor for pyGaia-like uncertainty model
+    Maps magnitudes onto a linear proxy for inverse brightness, 
+    with a bright end uncertainty floor to prevent bright stars from achieving
+    zero uncertainty. This will then get passed into pyGaia like polynomical to compute
+    proper motion uncertainties.
+
     Bright floor is set to 12.0 by default following pyGaia, but can be adjusted.
     
     Parameters:
     zmag (float or array-like): Magnitude value(s)
-    """
-    z = 10**(0.4 * (zmag - 15.0))
-    z[z < 10**(0.4 * (bright_floor - 15.0))] = 10**(0.4 * (bright_floor - 15.0))
-    return z
 
+    Returns:
+    float or array-like: Corresponding scaling values
+    """
+    scale = 10**(0.4 * (zmag - 15.0))
+    scale_min = 10**(0.4 * (bright_floor - 15.0))
+    scale[scale < scale_min] = scale_min
 
 # In[ ]:
 
@@ -312,9 +318,10 @@ def exp_pmra_err(zmag):
     """
     k_alpha = 0.000868462681306
 
-    z = zmag_function(np.atleast_1d(zmag))
+    z = zmag_to_scaling(np.atleast_1d(zmag))
     sigma = k_alpha * np.sqrt(40 + 800*z + 30*z**2) 
     return sigma if np.ndim(zmag) > 0 else sigma[0]
+
 
 
 # In[ ]:
@@ -333,8 +340,9 @@ def exp_pmdec_err(zmag):
     """
     k_delta = 0.000891500759622
 
-    z = zmag_function(np.atleast_1d(zmag))
+    z = zmag_to_scaling(np.atleast_1d(zmag))
     sigma = k_delta * np.sqrt(40 + 800*z + 30*z**2)
+
     return sigma if np.ndim(zmag) > 0 else sigma[0]
 
 
@@ -355,7 +363,10 @@ def log_rv_err(zmag):
     b = 11.296537
     c = 0.929316
     d = 19.026710
+
     return a + (b / (1 + np.exp(-c * (zmag - d))))
+
+ 
 
 def simulate_uncertainty(num_samples: int, uncertainty_model: str = "present"):
     """
@@ -516,8 +527,3 @@ def add_uncertainty(
     feat = feat + feat_err
 
     return phi1, phi2, feat, feat_err
-
-
-
-
-# In[ ]:
