@@ -282,16 +282,15 @@ def sigma_vr(V):
     d = 24.28729466
     return a + (b / (1 + np.exp(-c * (V - d))))
 
-
 def zmag_to_scaling(zmag, bright_floor=12.0):
     """
-    Maps magnitudes onto a linear proxy for inverse brightness, 
+    Maps magnitudes onto a linear proxy for inverse brightness,
     with a bright end uncertainty floor to prevent bright stars from achieving
     zero uncertainty. This will then get passed into pyGaia like polynomical to compute
     proper motion uncertainties.
 
     Bright floor is set to 12.0 by default following pyGaia, but can be adjusted.
-    
+
     Parameters:
     zmag (float or array-like): Magnitude value(s)
 
@@ -301,13 +300,11 @@ def zmag_to_scaling(zmag, bright_floor=12.0):
     scale = 10**(0.4 * (zmag - 15.0))
     scale_min = 10**(0.4 * (bright_floor - 15.0))
     scale[scale < scale_min] = scale_min
-
-# In[ ]:
-
+    return scale
 
 def exp_pmra_err(zmag):
     """
-    Computes the proper motion uncertainty in RA (sigma_pmra) for a given magnitude (DES z) 
+    Computes the proper motion uncertainty in RA (sigma_pmra) for a given magnitude (DES z)
     using a PyGaia-like function. See: https://github.com/agabrown/PyGaia/blob/master/src/pygaia/errors/utils.py
 
     Parameters:
@@ -319,17 +316,12 @@ def exp_pmra_err(zmag):
     k_alpha = 0.000868462681306
 
     z = zmag_to_scaling(np.atleast_1d(zmag))
-    sigma = k_alpha * np.sqrt(40 + 800*z + 30*z**2) 
+    sigma = k_alpha * np.sqrt(40 + 800*z + 30*z**2)
     return sigma if np.ndim(zmag) > 0 else sigma[0]
-
-
-
-# In[ ]:
-
 
 def exp_pmdec_err(zmag):
     """
-    Computes the proper motion uncertainty in Dec (sigma_pmdec) for a given magnitude (DES z) 
+    Computes the proper motion uncertainty in Dec (sigma_pmdec) for a given magnitude (DES z)
     using a PyGaia-like function.
 
     Parameters:
@@ -344,10 +336,6 @@ def exp_pmdec_err(zmag):
     sigma = k_delta * np.sqrt(40 + 800*z + 30*z**2)
 
     return sigma if np.ndim(zmag) > 0 else sigma[0]
-
-
-# In[ ]:
-
 
 def log_rv_err(zmag):
     """
@@ -366,8 +354,6 @@ def log_rv_err(zmag):
 
     return a + (b / (1 + np.exp(-c * (zmag - d))))
 
- 
-
 def simulate_uncertainty(num_samples: int, uncertainty_model: str = "present"):
     """
     Simulate a large population of stellar uncertainties of proper motions
@@ -377,7 +363,7 @@ def simulate_uncertainty(num_samples: int, uncertainty_model: str = "present"):
     - num_samples : int
         Number of samples to generate.
     - uncertainty : str
-        Whether to simulate "present" or ""future" uncertainties
+        Whether to simulate "present", ""future" or "aau" uncertainties.
 
     Returns:
     - pmra : np.ndarray
@@ -390,24 +376,24 @@ def simulate_uncertainty(num_samples: int, uncertainty_model: str = "present"):
 
     if uncertainty_model not in {"present", "future", "aau"}:
         raise ValueError(
-            f"Invalid uncertainty_model type: {uncertainty_model}. Must be 'present' or 'future'")
+            f"Invalid uncertainty_model type: {uncertainty_model}. Must be 'present', 'future' or 'aau'.")
 
     # Set magnitude cuts for present/future scenarios
     if uncertainty_model == "future":
         mag_r_min, mag_r_max = 14.8, 21.0
-    elif uncertainty_model == "present" or uncertainty_model == "aau":
+    elif uncertainty_model in ("present", "aau"):
         mag_r_min, mag_r_max = 14.8, 19.8
 
     if uncertainty_model in ('future', 'present'):
     # Choose Chabrier IMF and generate isochrone
         imf_chabrier = imfFactory('Chabrier2003')
         iso = isochrone.factory(
-        name='Dotter',
-        age=11.5,  # Gyr
-        metallicity=0.00016,  # Typical for old stellar streams
-        distance_modulus=16.807,  # Average stream distance modulus
-        imf=imf_chabrier,
-        survey='des'
+            name='Dotter',
+            age=11.5,  # Gyr
+            metallicity=0.00016,  # Typical for old stellar streams
+            distance_modulus=16.807,  # Average stream distance modulus
+            imf=imf_chabrier,
+            survey='des'
         )
 
         # Conservative buffer
@@ -449,19 +435,19 @@ def simulate_uncertainty(num_samples: int, uncertainty_model: str = "present"):
 
         # Compute RV uncertainties from V-band
         vr_err = sigma_vr(V)
-    
+
     elif uncertainty_model == 'aau':
 
         imf_chabrier = imfFactory('Chabrier2003')
         iso = isochrone.factory(
-        name='Dotter',
-        age=11.5,  # Gyr
-        metallicity=0.00016,  # Typical for old stellar streams
-        distance_modulus=16.807,  # Average stream distance modulus
-        imf=imf_chabrier,
-        survey='des', 
-        band_1='r',
-        band_2='z'
+            name='Dotter',
+            age=11.5,  # Gyr
+            metallicity=0.00016,  # Typical for old stellar streams
+            distance_modulus=16.807,  # Average stream distance modulus
+            imf=imf_chabrier,
+            survey='des',
+            band_1='r',
+            band_2='z'
         )
 
         buffer_factor = 2
