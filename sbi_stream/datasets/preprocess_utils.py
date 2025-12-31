@@ -410,17 +410,17 @@ def simulate_uncertainty(num_samples: int, uncertainty_model: str = "present"):
         survey='des'
         )
 
-    # Conservative buffer
+        # Conservative buffer
         buffer_factor = 2
         stellar_mass = num_samples * buffer_factor * iso.stellar_mass()
 
-    # Simulate synthetic stars from the isochrone
+        # Simulate synthetic stars from the isochrone
         g, r = [], []
         num_samples_curr = 0
         while num_samples_curr < num_samples:
             mag_g, mag_r = iso.simulate(stellar_mass=stellar_mass)
 
-        # Filter magnitudes and V-band based on cuts
+            # Filter magnitudes and V-band based on cuts
             mask = (mag_r >= mag_r_min) & (mag_r <= mag_r_max)
             g.append(mag_g[mask])
             r.append(mag_r[mask])
@@ -431,23 +431,23 @@ def simulate_uncertainty(num_samples: int, uncertainty_model: str = "present"):
         g = g[:num_samples]
         r = r[:num_samples]
 
-    # Compute V-band magnitudes for the synthetic population
+        # Compute V-band magnitudes for the synthetic population
         V = compute_V(g, r)
 
-    # Compute Gaia G-band magnitudes
+        # Compute Gaia G-band magnitudes
         G = compute_G(g, r)
 
-    # Compute Gaia DR3 proper motion uncertainties (in microarcsec → convert to mas)
+        # Compute Gaia DR3 proper motion uncertainties (in microarcsec → convert to mas)
         pmra_err, pmdec_err = proper_motion_uncertainty(G, release='dr3')
         pmra_err /= 1000
         pmdec_err /= 1000
 
-    # Future survey: 15% of present Gaia DR3 errors
+        # Future survey: 15% of present Gaia DR3 errors
         if uncertainty_model == "future":
-            pmra_err *= 0.15
-            pmdec_err *= 0.15
+                pmra_err *= 0.15
+                pmdec_err *= 0.15
 
-    # Compute RV uncertainties from V-band
+        # Compute RV uncertainties from V-band
         vr_err = sigma_vr(V)
     
     elif uncertainty_model == 'aau':
@@ -473,12 +473,13 @@ def simulate_uncertainty(num_samples: int, uncertainty_model: str = "present"):
         while num_samples_curr < num_samples:
             mag_r, mag_z = iso.simulate(stellar_mass=stellar_mass)
 
-        # Filter magnitudes and V-band based on cuts
+            # Filter magnitudes and V-band based on cuts
             mask = (mag_r >= mag_r_min) & (mag_r <= mag_r_max)
             r.append(mag_r[mask])
             z.append(mag_z[mask])
 
             num_samples_curr += np.sum(mask)
+
         r = np.concatenate(r)
         z = np.concatenate(z)
         r = r[:num_samples]
