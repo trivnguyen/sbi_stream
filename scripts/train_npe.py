@@ -137,6 +137,7 @@ def prepare_data(config: ml_collections.ConfigDict, embedding_norm_dict=None):
             phi1_min=config.data.get('phi1_min', None),
             phi1_max=config.data.get('phi1_max', None),
             uncertainty_model=config.data.get('uncertainty_model', None),
+            include_uncertainty=config.data.get('include_uncertainty', False),
         )
     elif config.data.data_type == 'preprocessed':
         dataset = datasets.read_processed_particle_datasets(
