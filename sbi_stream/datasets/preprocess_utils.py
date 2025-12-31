@@ -492,13 +492,13 @@ def add_uncertainty(
         feat_err = {}
 
         # Generate a pool of uncertainties
-        pmra_err, pmdec_err, vr_err = simulate_uncertainty(
+        pmra_unc, pmdec_unc, vr_unc = simulate_uncertainty(
             num_samples, uncertainty_model=uncertainty_model)
 
-        feat_err['pm1'] = np.random.normal(loc=0, scale=pmra_err)
-        feat_err['pm2'] = np.random.normal(loc=0, scale=pmdec_err)
-        feat_err['vr'] = np.random.normal(loc=0, scale=vr_err)
-
+        # sample uncertainties for each feature
+        feat_err['pm1'] = np.random.normal(loc=0, scale=pmra_unc)
+        feat_err['pm2'] = np.random.normal(loc=0, scale=pmdec_unc)
+        feat_err['vr'] = np.random.normal(loc=0, scale=vr_unc)
         if 'dist' in features:
             feat_err['dist'] = np.random.normal(
                 loc=0, scale=0.1 * np.abs(feat[:, features.index('dist')]))
@@ -507,10 +507,14 @@ def add_uncertainty(
         feat_err['phi2'] = np.zeros(num_samples)
         feat_err['phi1'] = np.zeros(num_samples)
         feat_err = np.stack([feat_err[f] for f in features]).T
+
+        # only return the velocity and proper motion uncertainties
+        feat_unc = np.stack([pmra_unc, pmdec_unc, vr_unc]).T
     else:
         feat_err = np.zeros_like(feat)
+        feat_unc = np.zeros((num_samples, 3))
 
     # Add uncertainties to the features
     feat = feat + feat_err
 
-    return phi1, phi2, feat, feat_err
+    return phi1, phi2, feat, feat_err, feat_unc

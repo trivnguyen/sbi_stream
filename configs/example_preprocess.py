@@ -20,4 +20,5 @@ def get_config():
     config.phi1_min = -20
     config.phi1_max = 10
     config.uncertainty_model = 'aau'
+    config.include_uncertainty = True
     return config

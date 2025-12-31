@@ -26,6 +26,7 @@ def read_raw_particle_datasets(
     phi1_min: Optional[float] = None,
     phi1_max: Optional[float] = None,
     uncertainty_model: Optional[str] = None,
+    include_uncertainty: bool = False,
 ):
     """
     Read and process particle-level stream datasets as PyTorch Geometric graphs.
@@ -52,6 +53,9 @@ def read_raw_particle_datasets(
         Maximum phi1 value to filter data.
     uncertainty_model : str, optional
         If not None, include measurement uncertainty. Either "present" or "future".
+    include_uncertainty : bool, optional
+        If True, include uncertainty features in the node features. This is
+        only applicable if uncertainty_model is not None.
 
     Returns
     -------
@@ -100,11 +104,14 @@ def read_raw_particle_datasets(
                         [phi1, phi2, feat], num_per_subsample=num_per_subsample)
 
                 # Add uncertainty if specified
-                phi1_ppr, phi2_ppr, feat_ppr, feat_err_ppr = preprocess_utils.add_uncertainty(
+                phi1_ppr, phi2_ppr, feat_ppr, _, feat_unc_ppr = preprocess_utils.add_uncertainty(
                     phi1_ppr, phi2_ppr, feat_ppr, features, uncertainty_model=uncertainty_model)
 
                 # Create PyTorch Geometric Data object
                 pos = np.stack([phi1_ppr, phi2_ppr], axis=1)
+                if uncertainty_model is not None and include_uncertainty:
+                    feat_ppr = np.concatenate([feat_ppr, feat_unc_ppr], axis=1)
+
                 graph_data = Data(
                     x=torch.tensor(feat_ppr, dtype=torch.float32),
                     y=torch.tensor(label, dtype=torch.float32).unsqueeze(0),

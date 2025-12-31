@@ -35,6 +35,7 @@ def main(config: ConfigDict):
             phi1_min=config.phi1_min,
             phi1_max=config.phi1_max,
             uncertainty_model=config.get('uncertainty_model', None),
+            include_uncertainty=config.get('include_uncertainty', False),
         )
         if data is not None:
             data_out_path = os.path.join(output_dir, f'data.{i}.pkl')
