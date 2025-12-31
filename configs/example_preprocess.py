@@ -14,7 +14,7 @@ def get_config():
     config.labels = ['log_M_sat', 'log_rs_sat', 'vz', 'vphi', 'r', 'phi']
     config.features = ['phi1', 'phi2', 'pm1', 'pm2', 'vr', 'dist']
     config.num_datasets = 50
-    config.init = 0
+    config.start_dataset = 0
     config.num_subsamples = 1
     config.num_per_subsample = 100
     config.phi1_min = -20
