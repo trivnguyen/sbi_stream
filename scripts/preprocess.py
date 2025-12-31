@@ -25,7 +25,7 @@ def main(config: ConfigDict):
     input_dir = os.path.join(config.root, config.name)
 
     print(f"Processing raw data from {input_dir} and saving to {output_dir}")
-    for i in tqdm(range(config.init, config.init + config.num_datasets)):
+    for i in tqdm(range(config.start_dataset, config.start_dataset + config.num_datasets)):
         data = datasets.read_raw_particle_datasets(
             input_dir, config.features, config.labels,
             num_datasets=1,
