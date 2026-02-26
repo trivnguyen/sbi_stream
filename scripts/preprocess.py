@@ -25,11 +25,11 @@ def main(config: ConfigDict):
     input_dir = os.path.join(config.root, config.name)
 
     print(f"Processing raw data from {input_dir} and saving to {output_dir}")
-    dataset_type = config.get('dataset_type', 'particle')
+    data_format = config.get('data_format', 'particle')
     for i in tqdm(range(config.start_dataset, config.start_dataset + config.num_datasets)):
         data = datasets.read_and_process_raw_datasets(
             input_dir,
-            dataset_type=dataset_type,
+            data_format=data_format,
             features=config.features,
             labels=config.labels,
             num_datasets=1,
@@ -41,7 +41,7 @@ def main(config: ConfigDict):
         if data is not None:
             data_out_path = os.path.join(output_dir, f'data.{i}.pkl')
 
-            if dataset_type == 'matched_filter':
+            if data_format == 'matched_filter':
                 data_dict = {
                     'signal': data[0],
                     'bg_lsst': data[1],

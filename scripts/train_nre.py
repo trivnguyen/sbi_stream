@@ -123,14 +123,14 @@ def prepare_data(config: ml_collections.ConfigDict, embedding_norm_dict=None):
     Returns:
         Tuple of (train_loader, val_loader, norm_dict)
     """
-    dataset_type = config.data.get('dataset_type', 'particle')
+    data_format = config.data.get('data_format', 'particle')
     data_dir = os.path.join(config.data.root, config.data.name)
 
     # read in the dataset and prepare the data loader for training
     if config.data.data_type == 'raw':
         dataset = datasets.read_and_process_raw_datasets(
             data_dir,
-            dataset_type=dataset_type,
+            data_format=data_format,
             features=config.data.features,
             labels=config.data.labels,
             num_datasets=config.data.get('num_datasets', 1),
@@ -146,7 +146,7 @@ def prepare_data(config: ml_collections.ConfigDict, embedding_norm_dict=None):
     elif config.data.data_type == 'preprocessed':
         dataset = datasets.read_processed_datasets(
             data_dir,
-            dataset_type=dataset_type,
+            data_format=data_format,
             num_datasets=config.data.get('num_datasets', 1),
             start_dataset=config.data.get('start_dataset', 0),
         )
@@ -164,7 +164,7 @@ def prepare_data(config: ml_collections.ConfigDict, embedding_norm_dict=None):
     # Create dataloaders with existing norm_dict
     train_loader, val_loader, norm_dict = datasets.prepare_dataloaders(
         dataset,
-        dataset_type=dataset_type,
+        data_format=data_format,
         train_frac=config.train_frac,
         train_batch_size=config.train_batch_size,
         eval_batch_size=config.eval_batch_size,
