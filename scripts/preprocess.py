@@ -25,11 +25,15 @@ def main(config: ConfigDict):
     input_dir = os.path.join(config.root, config.name)
 
     print(f"Processing raw data from {input_dir} and saving to {output_dir}")
+    dataset_type = config.get('dataset_type', 'particle')
     for i in tqdm(range(config.start_dataset, config.start_dataset + config.num_datasets)):
-        data = datasets.read_raw_particle_datasets(
-            input_dir, config.features, config.labels,
+        data = datasets.read_and_process_raw_datasets(
+            input_dir,
+            dataset_type=dataset_type,
+            features=config.features,
+            labels=config.labels,
             num_datasets=1,
-            init=i,
+            start_dataset=i,
             num_subsamples=config.get("num_subsamples", 1),
             num_per_subsample=config.get("num_per_subsample", None),
             phi1_min=config.phi1_min,
