@@ -221,8 +221,10 @@ class NPE(pl.LightningModule):
         elif self.pre_transforms is not None:
             batch = self.pre_transforms(batch)
 
-        batch = batch.to(self.device)
-        embedding = self.forward(batch)
+        # Use the embedding's _prepare_batch to handle format unpacking and
+        # per-tensor device placement (works for both PyG Data and tuple batches)
+        batch_dict = self.embedding_nn._prepare_batch(batch)
+        embedding = self.embedding_nn(batch_dict)
         posterior = self.flows(embedding).sample((num_samples, ))  # (num_samples, batch_size, output_size)
         posterior = posterior.transpose(0, 1) # (batch_size, num_samples, output_size)
         return posterior
