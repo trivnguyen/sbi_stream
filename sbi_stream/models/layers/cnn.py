@@ -1,17 +1,70 @@
 """2D CNN feature extractor layers: plain CNN and ResNet-style."""
 
-from typing import List, Union, Optional
+from typing import Callable, Dict, List, Union
 
 import torch
 import torch.nn as nn
 
 
-class CNN(nn.Module):
-    """2D CNN feature extractor.
+class ConvBlock(nn.Module):
+    """Single convolutional block: Conv2d -> [BN] -> act -> [Dropout2d] -> [MaxPool2d].
 
-    Each block applies: Conv2d → [BatchNorm2d] → act → [Dropout2d] → [MaxPool2d].
-    A final AdaptiveAvgPool2d + Flatten produces a fixed-size feature vector
-    regardless of input spatial dimensions.
+    Parameters
+    ----------
+    in_channels : int
+    out_channels : int
+    kernel_size : int
+        Default: 3.
+    stride : int
+        Default: 1.
+    batch_norm : bool
+        Default: True.
+    dropout : float
+        Dropout2d probability. Default: 0.0.
+    act : nn.Module
+        Activation function instance. Default: nn.ReLU().
+    downsample : bool
+        Apply 2×2 MaxPool2d after activation. Default: False.
+    """
+
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: int = 3,
+        stride: int = 1,
+        batch_norm: bool = True,
+        dropout: float = 0.0,
+        act: nn.Module = None,
+        downsample: bool = False,
+    ):
+        super().__init__()
+        self.conv = nn.Conv2d(
+            in_channels, out_channels,
+            kernel_size=kernel_size, stride=stride, padding=kernel_size // 2,
+        )
+        self.bn = nn.BatchNorm2d(out_channels) if batch_norm else None
+        self.act = act if act is not None else nn.ReLU()
+        self.dropout = nn.Dropout2d(dropout) if dropout > 0 else None
+        self.pool = nn.MaxPool2d(kernel_size=2, stride=2) if downsample else None
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.conv(x)
+        if self.bn is not None:
+            x = self.bn(x)
+        x = self.act(x)
+        if self.dropout is not None:
+            x = self.dropout(x)
+        if self.pool is not None:
+            x = self.pool(x)
+        return x
+
+
+class CNN(nn.Module):
+    """2D CNN feature extractor built from :class:`ConvBlock` layers.
+
+    A final AdaptiveAvgPool2d produces a fixed-size feature vector regardless
+    of input spatial dimensions.
 
     Parameters
     ----------
@@ -20,23 +73,19 @@ class CNN(nn.Module):
     channels : list of int
         Output channels for each convolutional block.
     kernel_size : int or list of int
-        Convolution kernel size per block. If a single int, the same size
-        is applied to all blocks. Default: 3.
+        Kernel size per block. Default: 3.
     stride : int or list of int
-        Convolution stride per block. Default: 1.
+        Stride per block. Default: 1.
     downsample : bool or list of bool
-        Whether to apply 2×2 MaxPool2d after each block for spatial
-        downsampling. Default: False.
+        Apply 2×2 MaxPool after each block. Default: False.
     batch_norm : bool
-        Add BatchNorm2d after each convolution. Default: True.
+        Use BatchNorm2d in every block. Default: True.
     dropout : float
-        Channel-wise Dropout2d probability applied after each block. Default: 0.0.
+        Dropout2d probability in every block. Default: 0.0.
     act : nn.Module
-        Activation function instance. Default: nn.ReLU().
+        Activation function instance shared across all blocks. Default: nn.ReLU().
     pooling_output_size : int
-        Spatial output size for the final AdaptiveAvgPool2d. The default of 1
-        gives global average pooling and an output feature size of
-        ``channels[-1]``. Default: 1.
+        Spatial size for the final AdaptiveAvgPool2d. Default: 1 (global avg pool).
     """
 
     def __init__(
@@ -56,67 +105,106 @@ class CNN(nn.Module):
         if act is None:
             act = nn.ReLU()
 
-        n_blocks = len(channels)
-        kernel_sizes = [kernel_size] * n_blocks if isinstance(kernel_size, int) else list(kernel_size)
-        strides = [stride] * n_blocks if isinstance(stride, int) else list(stride)
-        downsamples = [downsample] * n_blocks if isinstance(downsample, bool) else list(downsample)
+        n = len(channels)
+        kernel_sizes = [kernel_size] * n if isinstance(kernel_size, int) else list(kernel_size)
+        strides = [stride] * n if isinstance(stride, int) else list(stride)
+        downsamples = [downsample] * n if isinstance(downsample, bool)  else list(downsample)
 
-        blocks = []
+        self.blocks = nn.ModuleList()
         in_ch = in_channels
-        for out_ch, ks, st, do_pool in zip(channels, kernel_sizes, strides, downsamples):
-            padding = ks // 2  # preserve spatial dims for odd kernels at stride=1
-            blocks.append(nn.Conv2d(in_ch, out_ch, kernel_size=ks, stride=st, padding=padding))
-            if batch_norm:
-                blocks.append(nn.BatchNorm2d(out_ch))
-            blocks.append(act)
-            if dropout > 0:
-                blocks.append(nn.Dropout2d(dropout))
-            if do_pool:
-                blocks.append(nn.MaxPool2d(kernel_size=2, stride=2))
+        for out_ch, ks, st, ds in zip(channels, kernel_sizes, strides, downsamples):
+            self.blocks.append(
+                ConvBlock(in_ch, out_ch, ks, st, batch_norm, dropout, act, ds)
+            )
             in_ch = out_ch
 
-        self.conv_blocks = nn.Sequential(*blocks)
-        self.pool = nn.AdaptiveAvgPool2d(pooling_output_size)
-        self.flatten = nn.Flatten()
+        self.global_pool = nn.AdaptiveAvgPool2d(pooling_output_size)
         self.output_size = channels[-1] * pooling_output_size ** 2
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
         Parameters
         ----------
-        x : torch.Tensor
-            Image batch of shape ``(B, C, H, W)``.
+        x : torch.Tensor, shape (B, C, H, W)
 
         Returns
         -------
-        torch.Tensor
-            Feature vector of shape ``(B, output_size)``.
+        torch.Tensor, shape (B, output_size)
         """
-        x = self.conv_blocks(x)
-        x = self.pool(x)
-        return self.flatten(x)
+        for block in self.blocks:
+            x = block(x)
+        x = self.global_pool(x)
+        return x.flatten(1)
 
 
 # ---------------------------------------------------------------------------
 # ResNet-style blocks
 # ---------------------------------------------------------------------------
 
-class ResidualBlock(nn.Module):
-    """Pre-activation residual block (He et al., 2016).
+class BottleneckBlock(nn.Module):
+    """Pre-activation bottleneck block used in ResNet-50/101/152.
 
-    Architecture: BN → act → Conv2d → BN → act → Conv2d + skip.
-    A 1×1 projection conv is added automatically when ``in_channels`` !=
-    ``out_channels`` or ``stride`` > 1.
+    Architecture: BN -> act -> Conv(1×1) -> BN -> act -> Conv(3×3) -> BN -> act -> Conv(1×1) + skip.
 
     Parameters
     ----------
     in_channels : int
-        Number of input channels.
-    out_channels : int
-        Number of output channels.
+    planes : int
+        Inner (bottleneck) channel width. Output channels = ``planes * 4``.
     stride : int
-        Stride for the first convolution (use 2 to halve spatial dimensions).
-        Default: 1.
+        Applied to the 3×3 convolution. Use 2 to halve spatial dims. Default: 1.
+    act : nn.Module
+        Activation function instance. Default: nn.ReLU().
+    """
+
+    expansion: int = 4
+
+    def __init__(
+        self,
+        in_channels: int,
+        planes: int,
+        stride: int = 1,
+        act: nn.Module = None,
+    ):
+        super().__init__()
+        self.act = act if act is not None else nn.ReLU()
+        out_channels = planes * self.expansion
+
+        self.bn1   = nn.BatchNorm2d(in_channels)
+        self.conv1 = nn.Conv2d(in_channels, planes, kernel_size=1, bias=False)
+        self.bn2   = nn.BatchNorm2d(planes)
+        self.conv2 = nn.Conv2d(planes, planes, kernel_size=3,
+                               stride=stride, padding=1, bias=False)
+        self.bn3   = nn.BatchNorm2d(planes)
+        self.conv3 = nn.Conv2d(planes, out_channels, kernel_size=1, bias=False)
+
+        if stride != 1 or in_channels != out_channels:
+            self.shortcut = nn.Conv2d(in_channels, out_channels,
+                                      kernel_size=1, stride=stride, bias=False)
+        else:
+            self.shortcut = None
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        residual = x if self.shortcut is None else self.shortcut(x)
+        x = self.conv1(self.act(self.bn1(x)))
+        x = self.conv2(self.act(self.bn2(x)))
+        x = self.conv3(self.act(self.bn3(x)))
+        return x + residual
+
+
+class ResidualBlock(nn.Module):
+    """Pre-activation residual block (He et al., 2016).
+
+    Architecture: BN -> act -> Conv2d -> BN -> act -> Conv2d + skip.
+    A 1×1 projection conv is added automatically when ``in_channels !=
+    out_channels`` or ``stride > 1``.
+
+    Parameters
+    ----------
+    in_channels : int
+    out_channels : int
+    stride : int
+        Stride for the first convolution. Use 2 to halve spatial dims. Default: 1.
     act : nn.Module
         Activation function instance. Default: nn.ReLU().
     """
@@ -129,59 +217,61 @@ class ResidualBlock(nn.Module):
         act: nn.Module = None,
     ):
         super().__init__()
-        if act is None:
-            act = nn.ReLU()
+        self.act = act if act is not None else nn.ReLU()
 
-        self.block = nn.Sequential(
-            nn.BatchNorm2d(in_channels),
-            act,
-            nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=stride, padding=1, bias=False),
-            nn.BatchNorm2d(out_channels),
-            act,
-            nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1, bias=False),
-        )
+        self.bn1   = nn.BatchNorm2d(in_channels)
+        self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=3,
+                               stride=stride, padding=1, bias=False)
+        self.bn2   = nn.BatchNorm2d(out_channels)
+        self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3,
+                               stride=1, padding=1, bias=False)
 
-        # Projection shortcut to match dimensions when needed
         if stride != 1 or in_channels != out_channels:
-            self.shortcut = nn.Conv2d(
-                in_channels, out_channels, kernel_size=1, stride=stride, bias=False)
+            self.shortcut = nn.Conv2d(in_channels, out_channels,
+                                      kernel_size=1, stride=stride, bias=False)
         else:
-            self.shortcut = nn.Identity()
+            self.shortcut = None
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.block(x) + self.shortcut(x)
+        residual = x if self.shortcut is None else self.shortcut(x)
+        x = self.act(self.bn1(x))
+        x = self.conv1(x)
+        x = self.act(self.bn2(x))
+        x = self.conv2(x)
+        return x + residual
 
 
 class ResNet(nn.Module):
     """Flexible ResNet feature extractor.
 
-    Consists of an initial stem convolution followed by a configurable
-    number of residual stages. Each stage contains one or more
-    :class:`ResidualBlock` blocks, with the first block of each stage
-    (after the first) halving spatial dimensions via ``stride=2``.
+    Supports both basic (:class:`ResidualBlock`) and bottleneck
+    (:class:`BottleneckBlock`) block types. Use :func:`build_resnet` to
+    instantiate standard variants (ResNet-18/34/50/101/152).
 
     Parameters
     ----------
     in_channels : int
         Number of input image channels.
     channels : list of int
-        Number of output channels for each stage.
-        ``len(channels)`` determines the number of stages.
+        Output channels for each stage. For ``block_type='bottleneck'``, these
+        are the *final* output channels (i.e. ``planes * 4``).
     blocks_per_stage : int or list of int
-        Number of residual blocks per stage. Default: 2.
+        Residual blocks per stage. Default: 2.
     stem_channels : int
-        Output channels of the initial 7×7 stem convolution. Default: 64.
+        Output channels of the initial 7×7 stem conv. Default: 64.
     stem_stride : int
-        Stride of the stem convolution. Use 2 to halve spatial dims early
-        (as in the original ResNet for large images). Default: 1.
+        Stride of the stem conv. Default: 1.
     downsample_stages : bool or list of bool
-        Whether to apply stride=2 at the start of each stage (to halve
-        spatial dimensions). Default: True for all stages except the first.
-        If a single bool, applies to all stages.
+        Apply stride=2 at the first block of each stage. Defaults to False for
+        the first stage and True for all subsequent stages.
+    block_type : str
+        ``'basic'`` (:class:`ResidualBlock`, used in ResNet-18/34) or
+        ``'bottleneck'`` (:class:`BottleneckBlock`, used in ResNet-50+).
+        Default: ``'basic'``.
     act : nn.Module
         Activation function instance. Default: nn.ReLU().
     pooling_output_size : int
-        Spatial output size for the final AdaptiveAvgPool2d. Default: 1.
+        Spatial size for the final AdaptiveAvgPool2d. Default: 1.
     """
 
     def __init__(
@@ -192,62 +282,127 @@ class ResNet(nn.Module):
         stem_channels: int = 64,
         stem_stride: int = 1,
         downsample_stages: Union[bool, List[bool]] = None,
+        block_type: str = 'basic',
         act: nn.Module = None,
         pooling_output_size: int = 1,
     ):
         super().__init__()
 
-        if act is None:
-            act = nn.ReLU()
+        if block_type not in ('basic', 'bottleneck'):
+            raise ValueError(f"block_type must be 'basic' or 'bottleneck', got '{block_type}'")
+
+        self.act = act if act is not None else nn.ReLU()
+        self.block_type = block_type
 
         n_stages = len(channels)
-
         if isinstance(blocks_per_stage, int):
             blocks_per_stage = [blocks_per_stage] * n_stages
-
-        # Default: downsample at every stage after the first
         if downsample_stages is None:
             downsample_stages = [False] + [True] * (n_stages - 1)
         elif isinstance(downsample_stages, bool):
             downsample_stages = [downsample_stages] * n_stages
 
-        # Stem: single large conv to process the raw image
-        self.stem = nn.Sequential(
-            nn.Conv2d(in_channels, stem_channels, kernel_size=7,
-                      stride=stem_stride, padding=3, bias=False),
-            nn.BatchNorm2d(stem_channels),
-            act,
-        )
+        # Stem
+        self.stem_conv = nn.Conv2d(in_channels, stem_channels, kernel_size=7,
+                                   stride=stem_stride, padding=3, bias=False)
+        self.stem_bn = nn.BatchNorm2d(stem_channels)
 
-        # Residual stages
-        stages = []
+        # Flat list of all blocks across all stages
+        self.blocks = nn.ModuleList()
         prev_ch = stem_channels
         for out_ch, n_blocks, do_ds in zip(channels, blocks_per_stage, downsample_stages):
-            stage = []
             for b in range(n_blocks):
                 stride = 2 if (b == 0 and do_ds) else 1
-                stage.append(ResidualBlock(prev_ch, out_ch, stride=stride, act=act))
+                if block_type == 'basic':
+                    self.blocks.append(ResidualBlock(prev_ch, out_ch, stride, self.act))
+                else:
+                    planes = out_ch // BottleneckBlock.expansion
+                    self.blocks.append(BottleneckBlock(prev_ch, planes, stride, self.act))
                 prev_ch = out_ch
-            stages.append(nn.Sequential(*stage))
 
-        self.stages = nn.Sequential(*stages)
-        self.pool = nn.AdaptiveAvgPool2d(pooling_output_size)
-        self.flatten = nn.Flatten()
+        self.global_pool = nn.AdaptiveAvgPool2d(pooling_output_size)
         self.output_size = channels[-1] * pooling_output_size ** 2
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
         Parameters
         ----------
-        x : torch.Tensor
-            Image batch of shape ``(B, C, H, W)``.
+        x : torch.Tensor, shape (B, C, H, W)
 
         Returns
         -------
-        torch.Tensor
-            Feature vector of shape ``(B, output_size)``.
+        torch.Tensor, shape (B, output_size)
         """
-        x = self.stem(x)
-        x = self.stages(x)
-        x = self.pool(x)
-        return self.flatten(x)
+        x = self.act(self.stem_bn(self.stem_conv(x)))
+        for block in self.blocks:
+            x = block(x)
+        x = self.global_pool(x)
+        return x.flatten(1)
+
+
+# ---------------------------------------------------------------------------
+# Standard ResNet variant configs and factory
+# ---------------------------------------------------------------------------
+
+_RESNET_CONFIGS: Dict[str, dict] = {
+    'resnet18':  dict(channels=[64, 128, 256, 512],    blocks_per_stage=[2, 2, 2, 2], block_type='basic'),
+    'resnet34':  dict(channels=[64, 128, 256, 512],    blocks_per_stage=[3, 4, 6, 3], block_type='basic'),
+    'resnet50':  dict(channels=[256, 512, 1024, 2048], blocks_per_stage=[3, 4, 6, 3], block_type='bottleneck'),
+    'resnet101': dict(channels=[256, 512, 1024, 2048], blocks_per_stage=[3, 4, 23, 3], block_type='bottleneck'),
+    'resnet152': dict(channels=[256, 512, 1024, 2048], blocks_per_stage=[3, 8, 36, 3], block_type='bottleneck'),
+}
+
+
+def build_resnet(
+    variant: str,
+    in_channels: int = 3,
+    stem_channels: int = 64,
+    stem_stride: int = 2,
+    downsample_stages: Union[bool, List[bool]] = None,
+    act: 'nn.Module' = None,
+    pooling_output_size: int = 1,
+    **kwargs,
+) -> ResNet:
+    """Build a standard ResNet variant.
+
+    Parameters
+    ----------
+    variant : str
+        One of ``'resnet18'``, ``'resnet34'``, ``'resnet50'``, ``'resnet101'``,
+        ``'resnet152'``.
+    in_channels : int
+        Number of input image channels. Default 3.
+    stem_channels : int
+        Output channels of the 7×7 stem conv. Default 64.
+    stem_stride : int
+        Stride of the stem conv (use 2 for ImageNet-style, 1 for small images).
+        Default 2.
+    downsample_stages : bool or list of bool, optional
+        Override default stage downsampling. Defaults to ``[False, True, True, True]``.
+    act : nn.Module, optional
+        Activation function instance. Default ``nn.ReLU()``.
+    pooling_output_size : int
+        Spatial size for final AdaptiveAvgPool2d. Default 1.
+    **kwargs
+        Additional keyword arguments override the variant config (e.g.
+        ``channels``, ``blocks_per_stage``).
+
+    Returns
+    -------
+    ResNet
+    """
+    if variant not in _RESNET_CONFIGS:
+        raise ValueError(
+            f"Unknown ResNet variant '{variant}'. "
+            f"Available: {list(_RESNET_CONFIGS)}"
+        )
+    cfg = {**_RESNET_CONFIGS[variant], **kwargs}
+    return ResNet(
+        in_channels=in_channels,
+        stem_channels=stem_channels,
+        stem_stride=stem_stride,
+        downsample_stages=downsample_stages,
+        act=act,
+        pooling_output_size=pooling_output_size,
+        **cfg,
+    )

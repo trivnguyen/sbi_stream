@@ -21,7 +21,7 @@ from absl import flags
 from ml_collections import config_flags
 
 from sbi_stream import datasets
-from sbi_stream.models import NPE, GNNEmbedding, TransformerEmbedding
+from sbi_stream.models import NPE, GNNEmbedding, TransformerEmbedding, CNNEmbedding
 from sbi_stream.transforms import build_transformation
 from sbi_stream.callbacks.visualization import NPEVisualizationCallback
 
@@ -126,6 +126,8 @@ def prepare_data(config: ml_collections.ConfigDict, embedding_norm_dict=None):
     dataset_type = config.data.get('dataset_type', 'particle')
     data_dir = os.path.join(config.data.root, config.data.name)
 
+    print('[Data] Dataset type:', dataset_type)
+
     # read in the dataset and prepare the data loader for training
     if config.data.data_type == 'raw':
         dataset = datasets.read_and_process_raw_datasets(
@@ -135,13 +137,7 @@ def prepare_data(config: ml_collections.ConfigDict, embedding_norm_dict=None):
             labels=config.data.labels,
             num_datasets=config.data.get('num_datasets', 1),
             start_dataset=config.data.get('start_dataset', 0),
-            # preprocessing arguments
-            num_subsamples=config.data.get('num_subsamples', 1),
-            num_per_subsample=config.data.get('num_per_subsample', None),
-            phi1_min=config.data.get('phi1_min', None),
-            phi1_max=config.data.get('phi1_max', None),
-            uncertainty_model=config.data.get('uncertainty_model', None),
-            include_uncertainty=config.data.get('include_uncertainty', False),
+            **config.data.get('dataset_args', {}).values()
         )
     elif config.data.data_type == 'preprocessed':
         dataset = datasets.read_processed_datasets(
@@ -153,6 +149,7 @@ def prepare_data(config: ml_collections.ConfigDict, embedding_norm_dict=None):
     else:
         raise ValueError(f"Unknown data_type {config.data.data_type}")
 
+
     # Create dataloaders
     # If we have a norm_dict from embedding, we can reuse it or compute new one
     if embedding_norm_dict is not None and config.get('reuse_embedding_norm_dict', True):
@@ -162,17 +159,25 @@ def prepare_data(config: ml_collections.ConfigDict, embedding_norm_dict=None):
         norm_dict = None
 
     # Create dataloaders with existing norm_dict
+    loaders_kwargs = {
+        'dataset_type': dataset_type,
+        'train_frac': config.train_frac,
+        'train_batch_size': config.train_batch_size,
+        'eval_batch_size': config.eval_batch_size,
+        'num_workers': config.num_workers,
+        'num_subsamples': config.data.get('num_subsamples', 1),
+        'norm_dict': norm_dict,
+        'seed': config.get('seed_data', 0),
+    }
+
+    if dataset_type == 'matched_filter':
+        channels = config.data.get('channels', None)
+        if channels is None:
+            raise ValueError("For matched_filter dataset, 'channels' must be specified in config.data")
+        loaders_kwargs['channels'] = channels
+
     train_loader, val_loader, norm_dict = datasets.prepare_dataloaders(
-        dataset,
-        dataset_type=dataset_type,
-        train_frac=config.train_frac,
-        train_batch_size=config.train_batch_size,
-        eval_batch_size=config.eval_batch_size,
-        num_workers=config.num_workers,
-        num_subsamples=config.data.get('num_subsamples', 1),
-        norm_dict=norm_dict,
-        seed=config.get('seed_data', 0),
-    )
+        dataset, **loaders_kwargs)
     return train_loader, val_loader, norm_dict
 
 
@@ -208,9 +213,23 @@ def create_embedding_network(config: ml_collections.ConfigDict):
             loss_type=config.model.embedding.get('loss_type', 'mse'),
             loss_args=config.model.embedding.get('loss_args', None),
             mlp_args=config.model.embedding.get('mlp', None),
+            # NPE handles optimizer, scheduler, and pre_transforms
             optimizer_args=None,
             scheduler_args=None,
             pre_transforms=None,
+        )
+    elif model_type == 'cnn':
+        return CNNEmbedding(
+            in_channels=config.model.input_size,
+            cnn_args=config.model.embedding.cnn,
+            mlp_args=config.model.embedding.mlp,
+            loss_type=config.model.embedding.get('loss_type', 'mse'),
+            loss_args=config.model.embedding.get('loss_args', None),
+            # NPE handles optimizer, scheduler, and pre_transforms
+            optimizer_args=None,
+            scheduler_args=None,
+            pre_transforms=None,
+            norm_dict=None,
         )
     else:
         raise ValueError(f"Unsupported embedding model type: {config.model.type}")
@@ -373,8 +392,11 @@ def main(config: ml_collections.ConfigDict, workdir: str = "./logging/"):
 
     # Build pre-transforms (will be passed to NPE, not embedding_nn)
     print("[Transforms] Building pre-transforms...")
-    pre_transforms = build_transformation(
-        norm_dict=norm_dict, **config.pre_transforms)
+    if config.get('pre_transforms') is not None:
+        pre_transforms = build_transformation(
+            norm_dict=norm_dict, **config.pre_transforms)
+    else:
+        pre_transforms = None
 
     # Create model
     print("[Model] Creating NPE model...")

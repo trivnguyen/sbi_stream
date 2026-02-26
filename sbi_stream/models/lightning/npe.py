@@ -123,9 +123,9 @@ class NPE(pl.LightningModule):
             print(f"[NPE] Flows built from scratch with"
                   f" {sum(p.numel() for p in self.flows.parameters()):,} parameters")
 
-    def forward(self, batch):
+    def forward(self, batch_dict):
         """ Forward pass through the embedding network. """
-        return self.embedding_nn(self.embedding_nn._prepare_batch(batch))
+        return self.embedding_nn(batch_dict)
 
     def log_prob(self, embedding, theta):
         """ Evaluate the flow log probability. """
@@ -135,7 +135,8 @@ class NPE(pl.LightningModule):
         """Prepare batch data for training/validation."""
         if self.pre_transforms is not None:
             batch = self.pre_transforms(batch)
-        return batch
+        batch_dict = self.embedding_nn._prepare_batch(batch)
+        return batch_dict
 
     def training_step(self, batch, batch_idx):
         """Training step for PyTorch Lightning.
@@ -152,16 +153,14 @@ class NPE(pl.LightningModule):
         torch.Tensor
             Training loss
         """
-        batch = self._prepare_batch(batch)
-        batch_size = batch.num_graphs if hasattr(batch, 'num_graphs') else batch.batch_size
-        embedding = self.forward(batch)
+        batch_dict = self._prepare_batch(batch)
+        batch_size = batch_dict['batch_size']
 
-        # Compute loss
-        log_prob = self.log_prob(embedding, batch.y)
+        embedding = self.forward(batch_dict)
+        log_prob = self.log_prob(embedding, batch_dict['target'])
         loss = -log_prob.mean()
 
         # Log metrics
-        # Use hierarchical naming for better organization in loggers like WandB/TensorBoard
         self.log(
             'train/loss', loss, on_step=True, on_epoch=True, prog_bar=True,
             logger=True, batch_size=batch_size, sync_dist=True
@@ -183,16 +182,14 @@ class NPE(pl.LightningModule):
         torch.Tensor
             Validation loss
         """
-        batch = self._prepare_batch(batch)
-        batch_size = batch.num_graphs if hasattr(batch, 'num_graphs') else batch.batch_size
-        embedding = self.forward(batch)
+        batch_dict = self._prepare_batch(batch)
+        batch_size = batch_dict['batch_size']
 
-        # Compute loss
-        log_prob = self.log_prob(embedding, batch.y)
+        embedding = self.forward(batch_dict)
+        log_prob = self.log_prob(embedding, batch_dict['target'])
         loss = -log_prob.mean()
 
         # Log metrics
-        # Use hierarchical naming for better organization in loggers like WandB/TensorBoard
         self.log(
             'val/loss', loss, on_step=False, on_epoch=True, prog_bar=True,
             logger=True, batch_size=batch_size, sync_dist=True

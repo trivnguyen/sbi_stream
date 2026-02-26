@@ -6,7 +6,8 @@ import torch
 import torch.nn as nn
 import pytorch_lightning as pl
 
-from ..layers import CNN, ResNet, MLP
+from ..layers import CNN, ResNet, MLP, build_resnet
+from ..layers.cnn import _RESNET_CONFIGS
 from ..utils import get_activation, configure_optimizers, build_embedding_loss
 
 
@@ -34,8 +35,13 @@ class CNNEmbedding(pl.LightningModule):
         - ``pooling_output_size`` (int): AdaptiveAvgPool2d output spatial size. Default 1.
         - ``act_name`` (str): activation function name. Default ``'relu'``.
         - ``act_args`` (dict): kwargs for the activation. Default ``{}``.
-        - ``type`` (str): backbone type — ``'cnn'`` (default) or ``'resnet'``.
-          ``'resnet'`` accepts the same keys as :class:`ResNet`.
+        - ``type`` (str): backbone type. Options:
+
+          - ``'cnn'`` (default): plain :class:`CNN`.
+          - ``'resnet'``: fully custom :class:`ResNet` (pass ``channels``, etc.).
+          - ``'resnet18'``, ``'resnet34'``, ``'resnet50'``, ``'resnet101'``,
+            ``'resnet152'``: standard variants via :func:`build_resnet`.
+            Any remaining keys override the default config.
 
     mlp_args : dict
         Configuration for the MLP projection head:
@@ -97,7 +103,10 @@ class CNNEmbedding(pl.LightningModule):
             cnn_config.pop('act_args', {}),
         )
         backbone_type = cnn_config.pop('type', 'cnn')
-        if backbone_type == 'resnet':
+        if backbone_type in _RESNET_CONFIGS:
+            # Named standard variant: e.g. 'resnet50'. Remaining keys override defaults.
+            self.cnn = build_resnet(backbone_type, **cnn_config)
+        elif backbone_type == 'resnet':
             self.cnn = ResNet(**cnn_config)
         else:
             self.cnn = CNN(**cnn_config)
@@ -119,7 +128,7 @@ class CNNEmbedding(pl.LightningModule):
         self.loss_fn, self.flow = build_embedding_loss(self.loss_type, loss_config)
 
     def forward(self, batch_dict: dict) -> torch.Tensor:
-        """Forward pass: CNN → flatten → MLP.
+        """Forward pass: CNN -> flatten -> MLP.
 
         Parameters
         ----------

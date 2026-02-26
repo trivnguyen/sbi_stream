@@ -171,14 +171,15 @@ def read_processed(
     all_labels = []
 
     for i in tqdm(range(start_dataset, start_dataset + num_datasets)):
-        data_path = os.path.join(data_dir, f'dataset_{i}.pkl')
+        data_path = os.path.join(data_dir, f'data.{i}.pkl')
         if not os.path.exists(data_path):
+            print('Dataset {} not found at {}. Skipping...'.format(i, data_path))
             continue
         with open(data_path, 'rb') as f:
             data = pickle.load(f)
-        all_signal_hists.extend(data['signal_hists'])
-        all_bg_hists_lsst.extend(data['bg_hists_lsst'])
-        all_bg_hists_roman.extend(data['bg_hists_roman'])
+        all_signal_hists.extend(data['signal'])
+        all_bg_hists_lsst.extend(data['bg_lsst'])
+        all_bg_hists_roman.extend(data['bg_roman'])
         all_labels.extend(data['labels'])
 
     print('Total number of samples loaded: {}'.format(len(all_signal_hists)))
@@ -193,6 +194,7 @@ def read_processed(
 
 def prepare_dataloaders(
     data: Tuple,
+    channels: Optional[List[str]] = None,
     norm_dict: dict = None,
     train_frac: float = 0.8,
     train_batch_size: int = 32,
@@ -200,7 +202,6 @@ def prepare_dataloaders(
     num_workers: int = 0,
     seed: int = 42,
     num_subsamples: int = 1,
-    channels: Optional[List[str]] = None,
 ):
     """Create train/val dataloaders for matched-filter image datasets.
 
@@ -209,6 +210,9 @@ def prepare_dataloaders(
     data : tuple
         ``(signal_hists, bg_hists_lsst, bg_hists_roman, labels)`` as returned
         by :func:`read_and_process_raw` or :func:`read_processed`.
+    channels : list of str, optional
+        Which histogram channels to add as input. Any subset of
+        ``['signal', 'bg_lsst', 'bg_roman']``.
     norm_dict : dict, optional
         Pre-computed normalization parameters. Computed from training data if
         ``None``. Expected keys: ``x_mean``, ``x_std``, ``y_loc``, ``y_scale``,
@@ -225,10 +229,6 @@ def prepare_dataloaders(
         Random seed for shuffling. Default 42.
     num_subsamples : int, optional
         Number of subsamples per stream (prevents data leakage). Default 1.
-    channels : list of str, optional
-        Which histogram channels to stack as input. Any subset of
-        ``['signal', 'bg_lsst', 'bg_roman']``. Defaults to all three.
-
     Returns
     -------
     tuple
@@ -246,6 +246,7 @@ def prepare_dataloaders(
         'bg_roman': bg_hists_roman,
     }
     x = np.stack([channel_map[c] for c in channels], axis=1).astype(np.float32)
+    x = np.sum(x, axis=1, keepdims=True)
     y = labels.astype(np.float32)
     num_total = len(x)
 
@@ -270,6 +271,7 @@ def prepare_dataloaders(
         y_val = y[num_train:].reshape(-1, *y.shape[2:])
     else:
         shuffle = rng.permutation(num_total)
+        print(num_total, x.shape, y.shape)
         x, y = x[shuffle], y[shuffle]
 
         num_train = int(train_frac * num_total)

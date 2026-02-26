@@ -3,7 +3,7 @@
 from .gnn import GNN, GNNBlock
 from .mlp import MLP
 from .transformer import TransformerA, TransformerB, MultiHeadAttentionBlock
-from .cnn import CNN, ResidualBlock, ResNet
+from .cnn import CNN, ConvBlock, ResidualBlock, BottleneckBlock, ResNet, build_resnet
 
 __all__ = [
     'GNN',
@@ -13,6 +13,9 @@ __all__ = [
     'TransformerB',
     'MultiHeadAttentionBlock',
     'CNN',
+    'ConvBlock',
     'ResidualBlock',
+    'BottleneckBlock',
     'ResNet',
+    'build_resnet',
 ]
