@@ -87,6 +87,9 @@ def load_embedding_network(
     elif config.model.embedding.type == 'gnn':
         print(f"[Embedding] Detected GNNEmbedding model type")
         embedding_nn = GNNEmbedding.load_from_checkpoint(checkpoint_path)
+    elif config.model.embedding.type == 'cnn':
+        print(f"[Embedding] Detected CNNEmbedding model type")
+        embedding_nn = CNNEmbedding.load_from_checkpoint(checkpoint_path)
     else:
         raise ValueError(
             f"Unsupported embedding model type: {config.model.embedding.type}")
@@ -219,6 +222,7 @@ def create_embedding_network(config: ml_collections.ConfigDict):
             pre_transforms=None,
         )
     elif model_type == 'cnn':
+        print(f"[Model] Creating CNN Embedding model")
         return CNNEmbedding(
             in_channels=config.model.input_size,
             cnn_args=config.model.embedding.cnn,
