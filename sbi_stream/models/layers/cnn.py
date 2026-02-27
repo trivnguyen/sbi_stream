@@ -1,6 +1,6 @@
 """2D CNN feature extractor layers: plain CNN and ResNet-style."""
 
-from typing import Callable, Dict, List, Union
+from typing import Callable, Dict, List, Optional, Union
 
 import torch
 import torch.nn as nn
@@ -345,8 +345,8 @@ class ResNet(nn.Module):
 # ---------------------------------------------------------------------------
 
 _RESNET_CONFIGS: Dict[str, dict] = {
-    'resnet18':  dict(channels=[64, 128, 256, 512],    blocks_per_stage=[2, 2, 2, 2], block_type='basic'),
-    'resnet34':  dict(channels=[64, 128, 256, 512],    blocks_per_stage=[3, 4, 6, 3], block_type='basic'),
+    'resnet18':  dict(channels=[64, 128, 256, 512], blocks_per_stage=[2, 2, 2, 2], block_type='basic'),
+    'resnet34':  dict(channels=[64, 128, 256, 512], blocks_per_stage=[3, 4, 6, 3], block_type='basic'),
     'resnet50':  dict(channels=[256, 512, 1024, 2048], blocks_per_stage=[3, 4, 6, 3], block_type='bottleneck'),
     'resnet101': dict(channels=[256, 512, 1024, 2048], blocks_per_stage=[3, 4, 23, 3], block_type='bottleneck'),
     'resnet152': dict(channels=[256, 512, 1024, 2048], blocks_per_stage=[3, 8, 36, 3], block_type='bottleneck'),
@@ -406,3 +406,102 @@ def build_resnet(
         pooling_output_size=pooling_output_size,
         **cfg,
     )
+
+
+# ---------------------------------------------------------------------------
+# Pretrained backbones via timm
+# ---------------------------------------------------------------------------
+
+def build_pretrained(
+    model_name: str,
+    in_channels: int = 3,
+    pretrained: bool = True,
+    pooling_output_size: int = 1,
+    **timm_kwargs,
+) -> nn.Module:
+    """Load a pretrained backbone from timm as a feature extractor.
+
+    The classifier head is removed; the model returns a flat feature vector.
+    Non-3-channel inputs are handled automatically by timm (it adapts the stem
+    conv and initialises extra channels from the pretrained mean).
+
+    Parameters
+    ----------
+    model_name : str
+        Any model name supported by timm, e.g. ``'resnet50'``,
+        ``'efficientnet_b0'``, ``'vit_base_patch16_224'``.
+        Run ``timm.list_models(pretrained=True)`` to see all options.
+    in_channels : int
+        Number of input image channels. Default 3.
+    pretrained : bool
+        Load ImageNet pretrained weights. Default True.
+    pooling_output_size : int
+        For CNN backbones: spatial size of the global pooling output.
+        ``1`` uses global average pooling (recommended).
+        ``>1`` wraps the backbone with an :class:`nn.AdaptiveAvgPool2d`
+        and disables timm's built-in pooling.
+        Has no effect on transformer backbones (ViT etc.). Default 1.
+    **timm_kwargs
+        Extra keyword arguments forwarded verbatim to
+        ``timm.create_model`` (e.g. ``drop_rate``, ``drop_path_rate``).
+
+    Returns
+    -------
+    nn.Module
+        Backbone with the classification head removed. Exposes an
+        ``output_size`` attribute giving the flat feature dimension.
+
+    Examples
+    --------
+    >>> backbone = build_pretrained('resnet50', in_channels=1)
+    >>> backbone = build_pretrained('efficientnet_b4', in_channels=4, pretrained=False)
+    >>> backbone = build_pretrained('vit_base_patch16_224', in_channels=3)
+    """
+    try:
+        import timm
+    except ImportError as exc:
+        raise ImportError(
+            "timm is required for pretrained backbones: pip install timm"
+        ) from exc
+
+    if pooling_output_size == 1:
+        model = timm.create_model(
+            model_name,
+            pretrained=pretrained,
+            in_chans=in_channels,
+            num_classes=0,      # removes classifier head
+            global_pool='avg',
+            **timm_kwargs,
+        )
+        model.output_size = model.num_features
+    else:
+        # Disable timm's pooling; add a custom AdaptiveAvgPool2d wrapper
+        model = timm.create_model(
+            model_name,
+            pretrained=pretrained,
+            in_chans=in_channels,
+            num_classes=0,
+            global_pool='',
+            **timm_kwargs,
+        )
+        num_features = model.num_features
+        pool = nn.AdaptiveAvgPool2d(pooling_output_size)
+
+        class _WrappedBackbone(nn.Module):
+            def __init__(self, backbone, adaptive_pool, output_size):
+                super().__init__()
+                self.backbone = backbone
+                self.pool = adaptive_pool
+                self.output_size = output_size
+
+            def forward(self, x: torch.Tensor) -> torch.Tensor:
+                x = self.backbone(x)
+                x = self.pool(x)
+                return x.flatten(1)
+
+        model = _WrappedBackbone(
+            model, pool,
+            output_size=num_features * pooling_output_size ** 2,
+        )
+
+    return model
