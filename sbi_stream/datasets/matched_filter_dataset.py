@@ -30,14 +30,17 @@ _CHANNEL_KEYS = ('signal', 'bg_lsst', 'bg_roman')
 
 
 def _add_channels(signal_hists, bg_hists_lsst, bg_hists_roman, channels):
-    """Stack selected histogram channels into a multi-channel image (N, C, H, W) float32."""
+    """Sum selected histogram channels into a single-channel image (N, 1, H, W) float32."""
     channel_map = {
         'signal': signal_hists,
         'bg_lsst': bg_hists_lsst,
         'bg_roman': bg_hists_roman,
     }
-    stacked = np.stack([channel_map[c] for c in channels], axis=1).astype(np.float32)  # (N, C, H, W)
-    return stacked.sum(axis=1, keepdims=True)
+    arrays = [channel_map[c] for c in channels]
+    result = arrays[0].astype(np.float32)  # copy as float32
+    for arr in arrays[1:]:
+        result += arr  # accumulate in-place; avoids (N, C, H, W) intermediate
+    return result[:, np.newaxis]  # (N, 1, H, W)
 
 
 def read_and_process_raw(
@@ -250,9 +253,9 @@ def prepare_dataloaders(
     if channels is None:
         channels = list(_CHANNEL_KEYS)
 
-    # Stack into (N, C, H, W) then compress dynamic range with log1p
+    # Stack into (N, 1, H, W) then compress dynamic range with log1p
     x = _add_channels(signal_hists, bg_hists_lsst, bg_hists_roman, channels)
-    x = np.log1p(x)
+    np.log1p(x, out=x)  # in-place: avoids a full copy
     y = labels[:, :2].astype(np.float32)  # TODO: quick fix, should be configurable which labels to use for regression
     num_total = len(x)
 
@@ -309,11 +312,15 @@ def prepare_dataloaders(
         y_loc = norm_dict['y_loc']
         y_scale = norm_dict['y_scale']
 
-    # Normalize — broadcasting (C, 1, 1) against (N, C, H, W)
-    x_train = (x_train - x_loc) / x_std
-    y_train = (y_train - y_loc) / y_scale
-    x_val = (x_val - x_loc) / x_std
-    y_val = (y_val - y_loc) / y_scale
+    # Normalize in-place — avoids temporary arrays; views into x/y are fine here
+    x_train -= x_loc
+    x_train /= x_std
+    y_train -= y_loc
+    y_train /= y_scale
+    x_val -= x_loc
+    x_val /= x_std
+    y_val -= y_loc
+    y_val /= y_scale
 
     # Convert to tensors and create DataLoaders
     train_loader = DataLoader(
@@ -369,11 +376,13 @@ def prepare_test_dataloader(
 
     x = _add_channels(signal_hists, bg_hists_lsst, bg_hists_roman, channels)
     if norm_dict.get('log_transform', False):
-        x = np.log1p(x)
+        np.log1p(x, out=x)  # in-place
     y = labels.astype(np.float32)
 
-    x = (x - norm_dict['x_loc']) / norm_dict['x_std']
-    y = (y - norm_dict['y_loc']) / norm_dict['y_scale']
+    x -= norm_dict['x_loc']
+    x /= norm_dict['x_std']
+    y -= norm_dict['y_loc']
+    y /= norm_dict['y_scale']
 
     return DataLoader(
         TensorDataset(
