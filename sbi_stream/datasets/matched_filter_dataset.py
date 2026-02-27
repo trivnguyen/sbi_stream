@@ -29,6 +29,17 @@ from rubin_stream import (
 _CHANNEL_KEYS = ('signal', 'bg_lsst', 'bg_roman')
 
 
+def _add_channels(signal_hists, bg_hists_lsst, bg_hists_roman, channels):
+    """Stack selected histogram channels into a multi-channel image (N, C, H, W) float32."""
+    channel_map = {
+        'signal': signal_hists,
+        'bg_lsst': bg_hists_lsst,
+        'bg_roman': bg_hists_roman,
+    }
+    stacked = np.stack([channel_map[c] for c in channels], axis=1).astype(np.float32)  # (N, C, H, W)
+    return stacked.sum(axis=1, keepdims=True)
+
+
 def read_and_process_raw(
     data_dir: Union[str, Path],
     features: List[str],
@@ -215,7 +226,7 @@ def prepare_dataloaders(
         ``['signal', 'bg_lsst', 'bg_roman']``.
     norm_dict : dict, optional
         Pre-computed normalization parameters. Computed from training data if
-        ``None``. Expected keys: ``x_mean``, ``x_std``, ``y_loc``, ``y_scale``,
+        ``None``. Expected keys: ``x_loc``, ``x_std``, ``y_loc``, ``y_scale``,
         ``channels``.
     train_frac : float, optional
         Fraction of data used for training. Default 0.8.
@@ -239,15 +250,10 @@ def prepare_dataloaders(
     if channels is None:
         channels = list(_CHANNEL_KEYS)
 
-    # Stack into (N, C, H, W)
-    channel_map = {
-        'signal': signal_hists,
-        'bg_lsst': bg_hists_lsst,
-        'bg_roman': bg_hists_roman,
-    }
-    x = np.stack([channel_map[c] for c in channels], axis=1).astype(np.float32)
-    x = np.sum(x, axis=1, keepdims=True)
-    y = labels.astype(np.float32)
+    # Stack into (N, C, H, W) then compress dynamic range with log1p
+    x = _add_channels(signal_hists, bg_hists_lsst, bg_hists_roman, channels)
+    x = np.log1p(x)
+    y = labels[:, :2].astype(np.float32)  # TODO: quick fix, should be configurable which labels to use for regression
     num_total = len(x)
 
     rng = np.random.default_rng(seed)
@@ -271,7 +277,6 @@ def prepare_dataloaders(
         y_val = y[num_train:].reshape(-1, *y.shape[2:])
     else:
         shuffle = rng.permutation(num_total)
-        print(num_total, x.shape, y.shape)
         x, y = x[shuffle], y[shuffle]
 
         num_train = int(train_frac * num_total)
@@ -281,7 +286,7 @@ def prepare_dataloaders(
     # Compute normalization from training data if not provided
     if norm_dict is None:
         # Per-channel stats across all training pixels: mean over (N, H, W) per channel
-        x_mean = x_train.mean(axis=(0, 2, 3), keepdims=True).squeeze(0)  # (C, 1, 1)
+        x_loc = x_train.mean(axis=(0, 2, 3), keepdims=True).squeeze(0)  # (C, 1, 1)
         x_std = x_train.std(axis=(0, 2, 3), keepdims=True).squeeze(0)    # (C, 1, 1)
         x_std = np.where(x_std == 0, 1.0, x_std)  # guard against zero std
 
@@ -291,22 +296,23 @@ def prepare_dataloaders(
         y_scale = (y_max - y_min) / 2
 
         norm_dict = {
-            'x_mean': x_mean,
+            'x_loc': x_loc,
             'x_std': x_std,
             'y_loc': y_loc,
             'y_scale': y_scale,
             'channels': channels,
+            'log_transform': True,
         }
     else:
-        x_mean = norm_dict['x_mean']
+        x_loc = norm_dict['x_loc']
         x_std = norm_dict['x_std']
         y_loc = norm_dict['y_loc']
         y_scale = norm_dict['y_scale']
 
     # Normalize — broadcasting (C, 1, 1) against (N, C, H, W)
-    x_train = (x_train - x_mean) / x_std
+    x_train = (x_train - x_loc) / x_std
     y_train = (y_train - y_loc) / y_scale
-    x_val = (x_val - x_mean) / x_std
+    x_val = (x_val - x_loc) / x_std
     y_val = (y_val - y_loc) / y_scale
 
     # Convert to tensors and create DataLoaders
@@ -361,10 +367,12 @@ def prepare_test_dataloader(
     signal_hists, bg_hists_lsst, bg_hists_roman, labels = data
     channels = norm_dict.get('channels', list(_CHANNEL_KEYS))
 
-    x = _stack_channels(signal_hists, bg_hists_lsst, bg_hists_roman, channels)
+    x = _add_channels(signal_hists, bg_hists_lsst, bg_hists_roman, channels)
+    if norm_dict.get('log_transform', False):
+        x = np.log1p(x)
     y = labels.astype(np.float32)
 
-    x = (x - norm_dict['x_mean']) / norm_dict['x_std']
+    x = (x - norm_dict['x_loc']) / norm_dict['x_std']
     y = (y - norm_dict['y_loc']) / norm_dict['y_scale']
 
     return DataLoader(
