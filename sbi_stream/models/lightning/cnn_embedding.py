@@ -7,7 +7,7 @@ import torch.nn as nn
 import pytorch_lightning as pl
 
 from ..layers import CNN, ResNet, MLP, build_resnet
-from ..layers.cnn import _RESNET_CONFIGS
+from ..layers.cnn import _RESNET_CONFIGS, build_pretrained
 from ..utils import get_activation, configure_optimizers, build_embedding_loss
 
 
@@ -42,6 +42,11 @@ class CNNEmbedding(pl.LightningModule):
           - ``'resnet18'``, ``'resnet34'``, ``'resnet50'``, ``'resnet101'``,
             ``'resnet152'``: standard variants via :func:`build_resnet`.
             Any remaining keys override the default config.
+          - ``'pretrained'``: any timm model, loaded with ImageNet weights.
+            Requires ``model_name`` (str) — any name returned by
+            ``timm.list_models(pretrained=True)`` — and optionally
+            ``pretrained`` (bool, default True).  Extra keys are forwarded
+            verbatim to ``timm.create_model``.
 
     mlp_args : dict
         Configuration for the MLP projection head:
@@ -108,6 +113,21 @@ class CNNEmbedding(pl.LightningModule):
             self.cnn = build_resnet(backbone_type, **cnn_config)
         elif backbone_type == 'resnet':
             self.cnn = ResNet(**cnn_config)
+        elif backbone_type == 'pretrained':
+            # timm pretrained backbone — strip keys that don't apply.
+            cnn_config.pop('in_channels')   # already held in self.in_channels
+            cnn_config.pop('act', None)     # timm uses its own activations
+            model_name = cnn_config.pop('model_name')
+            use_pretrained = cnn_config.pop('pretrained', True)
+            pooling = cnn_config.pop('pooling_output_size', 1)
+            # Any remaining keys (e.g. drop_rate) are forwarded to timm.create_model
+            self.cnn = build_pretrained(
+                model_name=model_name,
+                in_channels=self.in_channels,
+                pretrained=use_pretrained,
+                pooling_output_size=pooling,
+                **cnn_config,
+            )
         else:
             self.cnn = CNN(**cnn_config)
 
