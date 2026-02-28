@@ -41,6 +41,8 @@ def read_and_process_raw_datasets(data_dir, data_format, **kwargs):
     **kwargs
         Forwarded to the dataset module's ``read_and_process_raw``.
     """
+    print(kwargs)
+    print(_get(data_format))
     return _get(data_format).read_and_process_raw(data_dir, **kwargs)
 
 

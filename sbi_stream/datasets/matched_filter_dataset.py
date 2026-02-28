@@ -50,6 +50,9 @@ def read_and_process_raw(
     num_datasets: int = 1,
     start_dataset: int = 0,
     num_subsamples: int = 1,
+    mag_min: float = 19.6,
+    mag_max: float = 25.25,
+    surveys: Optional[List[str]] = None,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Read and process stream dataset into matched-filter image-based dataset
@@ -81,9 +84,8 @@ def read_and_process_raw(
     matched_filter_dict = config.DEFAULT_MATCHED_FILTER_CONFIG
     default_data_dir = config.DEFAULT_DATA_DIR
     stream = "aau"
-    mag_max = 25.25
-    mag_min = 19.6
-    surveys = ["lsst_r1p9"]
+    if surveys is None:
+        surveys = ['lsst_r1p9']
 
     stream_info = streams.get_stream_info(stream, mag_max, data_dir=default_data_dir)
     matched_filter_dict = matched_filter_dict.copy()
@@ -312,7 +314,7 @@ def prepare_dataloaders(
         y_loc = norm_dict['y_loc']
         y_scale = norm_dict['y_scale']
 
-    # Normalize in-place — avoids temporary arrays; views into x/y are fine here
+    # Normalize in-place (more memory efficient)
     x_train -= x_loc
     x_train /= x_std
     y_train -= y_loc
