@@ -144,7 +144,7 @@ class CNN(nn.Module):
 class BottleneckBlock(nn.Module):
     """Pre-activation bottleneck block used in ResNet-50/101/152.
 
-    Architecture: BN -> act -> Conv(1×1) -> BN -> act -> Conv(3×3) -> BN -> act -> Conv(1×1) + skip.
+    Architecture: BN -> act -> Conv(1x1) -> BN -> act -> Conv(3×3) -> BN -> act -> Conv(1x1) + skip.
 
     Parameters
     ----------
@@ -196,7 +196,7 @@ class ResidualBlock(nn.Module):
     """Pre-activation residual block (He et al., 2016).
 
     Architecture: BN -> act -> Conv2d -> BN -> act -> Conv2d + skip.
-    A 1×1 projection conv is added automatically when ``in_channels !=
+    A 1x1 projection conv is added automatically when ``in_channels !=
     out_channels`` or ``stride > 1``.
 
     Parameters
