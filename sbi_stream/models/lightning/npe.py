@@ -202,7 +202,7 @@ class NPE(pl.LightningModule):
             self.parameters(), self.optimizer_args, self.scheduler_args)
 
     @torch.no_grad()
-    def sample_from_batch(self, batch, num_samples, pre_transforms=None):
+    def sample_from_batch(self, batch, num_samples, pre_transforms=None, return_log_prob=False):
         """Sample from the posterior distribution for a given batch.
 
         Args:
@@ -225,12 +225,23 @@ class NPE(pl.LightningModule):
         # per-tensor device placement (works for both PyG Data and tuple batches)
         batch_dict = self.embedding_nn._prepare_batch(batch)
         embedding = self.embedding_nn(batch_dict)
-        posterior = self.flows(embedding).sample((num_samples, ))  # (num_samples, batch_size, output_size)
-        posterior = posterior.transpose(0, 1) # (batch_size, num_samples, output_size)
+        dist = self.flows(embedding)
+
+        posterior = dist.sample((num_samples, ))  # (num_samples, batch_size, output_size)
+
+        if return_log_prob:
+            log_prob = dist.log_prob(posterior)  # (num_samples, batch_size)
+            posterior = posterior.transpose(0, 1)
+            log_prob = log_prob.transpose(0, 1)
+            return posterior, log_prob
+
+        posterior = posterior.transpose(0, 1)
         return posterior
 
     @torch.no_grad()
-    def sample_from_loader(self, loader, num_samples, pre_transforms=None, verbose=True):
+    def sample_from_loader(
+        self, loader, num_samples, pre_transforms=None, verbose=True,
+        return_log_prob=False):
         """Sample from the posterior distribution for all data in a DataLoader.
 
         Args:
@@ -244,9 +255,22 @@ class NPE(pl.LightningModule):
         """
         self.eval()
         posteriors = []
+        if return_log_prob:
+            log_probs = []
         for batch in tqdm(loader, disable=not verbose):
-            posterior = self.sample_from_batch(
-                batch, num_samples, pre_transforms=pre_transforms)
-            posteriors.append(posterior.cpu())
+            if return_log_prob:
+                posterior, log_prob = self.sample_from_batch(
+                    batch, num_samples, pre_transforms=pre_transforms,
+                    return_log_prob=True)
+                posteriors.append(posterior.cpu())
+                log_probs.append(log_prob.cpu())
+            else:
+                posterior = self.sample_from_batch(
+                    batch, num_samples, pre_transforms=pre_transforms)
+                posteriors.append(posterior.cpu())
+
         posteriors = torch.cat(posteriors, dim=0)
+        if return_log_prob:
+            log_probs = torch.cat(log_probs, dim=0)
+            return posteriors, log_probs
         return posteriors
